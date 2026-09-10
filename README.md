@@ -42,6 +42,10 @@ Now, from one chat:
 Muse runs the loop: it reads each session's output, keeps the agents moving,
 and only taps you when something actually needs you.
 
+The `bin/mac-watch` helper does the polling behind that loop: it tracks
+watched sessions and reports when one needs input, goes quiet, or stalls —
+designed to run on a schedule.
+
 The skill ships two helpers:
 
 - `bin/mac-ssh` — SSH transport to the Mac over the Tailscale tunnel proxy

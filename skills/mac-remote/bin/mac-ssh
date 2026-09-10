@@ -43,7 +43,7 @@ proxy_noscheme="${proxy_noport#*://}"
 proxy_host="${proxy_noscheme#*@}"
 proxy_userpass="${proxy_noscheme%@*}"
 
-exec ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=accept-new \
+exec ssh -n -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=accept-new \
   -i "$MAC_SSH_KEY" \
   -o ProxyCommand="socat STDIO PROXY:${proxy_host}:%h:%p,proxyport=3130,proxyauth=${proxy_userpass}" \
   "$MAC_REMOTE_USER@$MAC_REMOTE_HOST" "$@"

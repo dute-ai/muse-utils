@@ -18,6 +18,10 @@ Helpers live in `bin/` — always use them, never hand-roll the SSH/tmux plumbin
   - `send <name> <text...>` — type text literally, then Enter (submits a prompt)
   - `key <name> <key>` — send a raw key: `C-c`, `Escape`, `Up`
   - `list`, `kill <name>`
+- `bin/mac-watch <cmd>` — supervise sessions: `add` / `rm` / `list` the
+  watchlist; `check` polls each watched pane and prints only status
+  transitions (WORKING / IDLE / NEEDS_INPUT / STALLED / GONE). State lives
+  in `<state-dir>/watch/`.
 
 ## Auth
 SSH key auth. One-time setup is in `references/setup.md`: enable Remote Login on the Mac, join the same Tailscale network on both ends, generate a keypair on the VM, add the public key to the Mac's `~/.ssh/authorized_keys`, and write `MAC_REMOTE_USER` / `MAC_REMOTE_HOST` to the state config. The first tunnel connection needs the user's approval — let it sit, don't retry.
@@ -29,3 +33,8 @@ SSH key auth. One-time setup is in `references/setup.md`: enable Remote Login on
 4. You cannot see the Mac's screen (`screencapture` fails — an SSH session has no display) and cannot inject keystrokes/clicks into GUI apps (Accessibility denies it). Launching apps with `open -a` and driving Terminal.app via AppleScript (`do script`, `contents of tab`) do work — see `references/gotchas.md`.
 5. Keep the Mac's Tailscale IP, username, and key paths in the state config, never in chat or logs. Never print a private key.
 6. The helpers resolve config from env vars first, then `<state-dir>/config`. When run from this repo the state dir is `<repo>/state` (gitignored); when installed, `~/workspace/mac-remote/state`.
+7. `mac-watch` detection is heuristic: NEEDS_INPUT matches known prompt
+   patterns, IDLE means "no new output" (often a finished step), STALLED is
+   quiet past `MAC_WATCH_STALL_MIN` (default 30). Treat them as "look here",
+   not proof. `check` prints only transitions — run it on a schedule and
+   surface to the user only what's new.
