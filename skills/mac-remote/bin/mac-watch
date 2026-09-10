@@ -1,171 +1,238 @@
-#!/bin/bash
-# mac-watch — supervise tmux sessions on the Mac, report status changes.
-#
-# Polls each watched session's pane and classifies it:
-#   WORKING      output changed since last check
-#   IDLE         no new output for a while (often: a step finished)
-#   NEEDS_INPUT  an input/confirmation prompt is visible
-#   STALLED      quiet longer than MAC_WATCH_STALL_MIN (default 30)
-#   GONE         the tmux session no longer exists
-#
-# Prints only transitions since the last check — quiet runs print one line.
-# Detection is heuristic; treat NEEDS_INPUT/IDLE as "look here", not proof.
-# Meant to run on a schedule (e.g. every 5 minutes); the caller decides
-# whether the output is worth surfacing to the user.
-#
-# Usage:
-#   mac-watch add <name>    watch a session
-#   mac-watch rm <name>     stop watching a session
-#   mac-watch list          watched sessions + last known status
-#   mac-watch check         poll all watched sessions, print transitions
-set -euo pipefail
-BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-MAC_SSH="$BIN_DIR/mac-ssh"
-MAC_TMUX="$BIN_DIR/mac-tmux"
-STALL_MIN="${MAC_WATCH_STALL_MIN:-30}"
-LINES=50
+#!/usr/bin/env python3
+"""mac-watch — supervise tmux sessions on the Mac.
 
-# --- state dir (same resolution as mac-ssh) ---
-if [ -n "${MAC_REMOTE_STATE_DIR:-}" ]; then
-  STATE_DIR="$MAC_REMOTE_STATE_DIR"
-else
-  REPO_ROOT="$(cd "$BIN_DIR/../../.." 2>/dev/null && pwd || true)"
-  if [ -n "${REPO_ROOT:-}" ] && [ -d "$REPO_ROOT/state" ]; then
-    STATE_DIR="$REPO_ROOT/state"
-  else
-    STATE_DIR="$HOME/workspace/mac-remote/state"
-  fi
-fi
-WATCH_DIR="$STATE_DIR/watch"
-WATCHLIST="$WATCH_DIR/watchlist"
-mkdir -p "$WATCH_DIR"
-[ -f "$WATCHLIST" ] || : > "$WATCHLIST"
+A mechanical reporter, not a judge. For each watched session it captures the
+pane, diffs against the last check, and reports what changed. It never decides
+"needs input" or "stuck" — that call belongs to the operator reading this
+output (an LLM on a scheduled run, or a human).
 
-# Case-insensitive prompt patterns that mean "the agent is waiting on you".
-NEEDS_INPUT_RE='do you want to proceed|\(y(es)?/n(o)?\)|press enter to (confirm|continue|approve|proceed)|waiting for (your |user )?input|would you like me to continue|approval required|needs your approval|confirm (to )?(continue|proceed)|❯ 1\.'
+Statuses:
+  CHANGED   pane content changed since last check (new lines shown)
+  QUIET     unchanged; reports how long it's been quiet
+  GONE      the tmux session no longer exists
 
-now="$(date +%s)"
+Every distinct pane state is shown once; repeat checks print one line per
+session, so scheduled runs are trivially triageable.
 
-load_state() { # $1=name -> S_HASH S_STATUS S_UNCHANGED S_LASTCHANGE S_NOTIFIED
-  S_HASH=""; S_STATUS=""; S_UNCHANGED=0; S_LASTCHANGE="$now"; S_NOTIFIED=""
-  local f="$WATCH_DIR/$1.state"
-  if [ -f "$f" ]; then set -a; . "$f"; set +a; fi
-  S_HASH="${HASH:-}"; S_STATUS="${STATUS:-}"; S_UNCHANGED="${UNCHANGED:-0}"
-  S_LASTCHANGE="${LASTCHANGE:-$now}"; S_NOTIFIED="${NOTIFIED:-}"
-}
+Usage:
+  mac-watch add <name>    watch a session
+  mac-watch rm <name>     stop watching a session
+  mac-watch list          watched sessions + last known state
+  mac-watch check [--json]
+"""
+import datetime
+import hashlib
+import json
+import os
+import subprocess
+import sys
 
-save_state() { # $1=name $2=hash $3=status $4=unchanged $5=lastchange $6=notified
-  printf 'HASH=%s\nSTATUS=%s\nUNCHANGED=%s\nLASTCHANGE=%s\nNOTIFIED=%s\n' \
-    "$2" "$3" "$4" "$5" "$6" > "$WATCH_DIR/$1.state"
-}
+BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+MAC_SSH = os.path.join(BIN_DIR, "mac-ssh")
+MAC_TMUX = os.path.join(BIN_DIR, "mac-tmux")
+CAPTURE_LINES = 60   # pane lines captured per check
+TAIL_LINES = 12      # lines shown for a newly-seen quiet state
+NEW_LINES_CAP = 30   # cap on "new lines" shown for a changed pane
 
-excerpt() { # last 12 non-empty lines of stdin
-  grep -v '^[[:space:]]*$' | tail -12
-}
 
-check_one() { # $1=name ; prints a transition block only on status change
-  local name="$1" capture="" hash="" status detail unchanged lastchange notified quiet_min
-  load_state "$name"
-  unchanged="$S_UNCHANGED"; lastchange="$S_LASTCHANGE"; notified="$S_NOTIFIED"
+def state_dir():
+    if os.environ.get("MAC_REMOTE_STATE_DIR"):
+        return os.environ["MAC_REMOTE_STATE_DIR"]
+    repo_root = os.path.abspath(os.path.join(BIN_DIR, "..", "..", ".."))
+    if os.path.isdir(os.path.join(repo_root, "state")):
+        return os.path.join(repo_root, "state")
+    return os.path.expanduser("~/workspace/mac-remote/state")
 
-  if ! capture="$("$MAC_TMUX" see "$name" "$LINES" 2>&1)"; then
-    status="GONE"; detail="session not found"
-  elif [ -z "${capture//[[:space:]]/}" ]; then
-    status="UNKNOWN"; detail="empty pane"
-  else
-    hash="$(printf '%s' "$capture" | sha1sum | cut -d' ' -f1)"
-    if [ -n "$S_HASH" ] && [ "$hash" = "$S_HASH" ]; then
-      unchanged=$((unchanged + 1))
-    else
-      unchanged=0; lastchange="$now"
-    fi
-    quiet_min=$(( (now - lastchange) / 60 ))
-    if printf '%s' "$capture" | grep -qiE "$NEEDS_INPUT_RE"; then
-      status="NEEDS_INPUT"; detail="input prompt visible"
-    elif [ "$unchanged" -gt 0 ] && [ "$quiet_min" -ge "$STALL_MIN" ]; then
-      status="STALLED"; detail="no output for ${quiet_min}m"
-    elif [ "$unchanged" -gt 0 ]; then
-      status="IDLE"; detail="quiet for ${quiet_min}m"
-    else
-      status="WORKING"; detail="new output"
-    fi
-  fi
 
-  if [ "$status" != "$notified" ]; then
-    printf -- '-> %s: %s (%s)\n' "$name" "$status" "$detail"
-    case "$status" in
-      NEEDS_INPUT|STALLED|GONE)
-        printf '%s' "$capture" | excerpt | sed 's/^/   | /'
-        ;;
-    esac
-    notified="$status"
-  fi
-  save_state "$name" "$hash" "$status" "$unchanged" "$lastchange" "$notified"
-}
+WATCH_DIR = os.path.join(state_dir(), "watch")
+WATCHLIST = os.path.join(WATCH_DIR, "watchlist")
+os.makedirs(WATCH_DIR, exist_ok=True)
+if not os.path.exists(WATCHLIST):
+    open(WATCHLIST, "w").close()
 
-cmd_add() {
-  local name="${1:?"add <name>"}"
-  if [ -f "$WATCHLIST" ] && grep -qx "$name" "$WATCHLIST"; then
-    echo "$name is already watched"; return 0
-  fi
-  if ! "$MAC_TMUX" list 2>/dev/null | grep -q "^${name}:"; then
-    echo "warning: no tmux session '$name' right now (watching anyway)"
-  fi
-  printf '%s\n' "$name" >> "$WATCHLIST"
-  echo "watching $name"
-}
 
-cmd_rm() {
-  local name="${1:?"rm <name>"}"
-  grep -vx "$name" "$WATCHLIST" > "$WATCHLIST.tmp" || true
-  mv "$WATCHLIST.tmp" "$WATCHLIST"
-  rm -f "$WATCH_DIR/$name.state"
-  echo "stopped watching $name"
-}
+def run(*args):
+    return subprocess.run(args, capture_output=True, text=True)
 
-cmd_list() {
-  local name quiet_min
-  while IFS= read -r name; do
-    [ -n "$name" ] || continue
-    load_state "$name"
-    if [ -z "$S_STATUS" ]; then
-      echo "$name: never checked"
-    else
-      quiet_min=$(( (now - S_LASTCHANGE) / 60 ))
-      echo "$name: $S_STATUS (last change ~${quiet_min}m ago)"
-    fi
-  done < "$WATCHLIST"
-}
 
-cmd_check() {
-  local names output changed total
-  names="$(grep -v '^[[:space:]]*$' "$WATCHLIST" || true)"
-  if [ -z "$names" ]; then
-    echo "watch: no sessions watched (mac-watch add <name>)"; return 0
-  fi
-  if ! "$MAC_SSH" 'true' >/dev/null 2>&1; then
-    echo "watch: transport failed — Mac unreachable? (states unchanged)"; return 1
-  fi
-  total="$(printf '%s\n' "$names" | grep -c .)"
-  output=""
-  while IFS= read -r name; do
-    [ -n "$name" ] || continue
-    output="${output}$(check_one "$name")"$'\n'
-  done <<< "$names"
-  changed="$(printf '%s' "$output" | grep -c '^-> ' || true)"
-  printf 'watch %s: %s watched\n' "$(date '+%F %T %Z')" "$total"
-  if [ "$changed" -eq 0 ]; then
-    echo "all quiet"
-  else
-    printf '%s' "$output" | grep '^-> \|^   | '
-  fi
-}
+def load_watchlist():
+    with open(WATCHLIST) as f:
+        return [line.strip() for line in f if line.strip()]
 
-cmd="${1:?"usage: mac-watch add|rm|list|check ..."}"; shift
-case "$cmd" in
-  add)   cmd_add "$@" ;;
-  rm)    cmd_rm "$@" ;;
-  list)  cmd_list ;;
-  check) cmd_check ;;
-  *) echo "unknown command: $cmd" >&2; exit 1 ;;
-esac
+
+def save_watchlist(names):
+    with open(WATCHLIST, "w") as f:
+        f.write("".join(n + "\n" for n in names))
+
+
+def state_path(name):
+    safe = "".join(c for c in name if c.isalnum() or c in "-_.")
+    return os.path.join(WATCH_DIR, safe + ".json")
+
+
+def load_state(name):
+    try:
+        with open(state_path(name)) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(name, st):
+    with open(state_path(name), "w") as f:
+        json.dump(st, f)
+
+
+def trim_block(lines):
+    """Drop leading blank lines from a block about to be shown."""
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    return lines[i:]
+
+
+def check_one(name, now):
+    """Poll one session. Returns a dict: name/status/detail/block."""
+    st = load_state(name)
+    r = run(MAC_TMUX, "see", name, str(CAPTURE_LINES))
+
+    if r.returncode != 0:
+        # Session is gone. Report the error once, then one-liners.
+        block = None
+        if not st.get("gone_shown"):
+            err = (r.stdout or r.stderr).strip() or "(no output)"
+            block = [err]
+            st["gone_shown"] = True
+        st["gone"] = True
+        st["status"] = "GONE"
+        save_state(name, st)
+        return {"name": name, "status": "GONE", "detail": "session not found",
+                "block": block}
+
+    lines = [ln.rstrip() for ln in r.stdout.splitlines()]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    digest = hashlib.sha1("\n".join(lines).encode()).hexdigest()
+    prev_digest = st.get("hash")
+    prev_lines = st.get("lines", [])
+
+    if digest != prev_digest:
+        prev_set = set(prev_lines)
+        new_lines = [ln for ln in lines if ln not in prev_set]
+        if not prev_lines:
+            detail, block = "first check", trim_block(lines[-20:])
+        else:
+            detail = f"{len(new_lines)} new line(s)"
+            block = trim_block(new_lines[:NEW_LINES_CAP] or lines[-TAIL_LINES:])
+        st.update(hash=digest, last_change=now, lines=lines[-CAPTURE_LINES:],
+                  shown_hash=digest, gone=False, gone_shown=False,
+                  status="CHANGED")
+        save_state(name, st)
+        return {"name": name, "status": "CHANGED", "detail": detail,
+                "block": block}
+
+    quiet_min = int((now - st.get("last_change", now)) // 60)
+    detail = f"quiet {quiet_min}m"
+    st["status"] = "QUIET"
+    block = None
+    if st.get("shown_hash") != digest:
+        # Unchanged since last check, but the judge hasn't seen this state.
+        block = trim_block(lines[-TAIL_LINES:])
+        st["shown_hash"] = digest
+    save_state(name, st)
+    return {"name": name, "status": "QUIET", "detail": detail, "block": block}
+
+
+def cmd_add(name):
+    names = load_watchlist()
+    if name in names:
+        print(f"{name} is already watched")
+        return 0
+    r = run(MAC_TMUX, "list")
+    if r.returncode != 0 or f"\n{name}:" not in "\n" + r.stdout:
+        print(f"warning: no tmux session '{name}' right now (watching anyway)")
+    names.append(name)
+    save_watchlist(names)
+    print(f"watching {name}")
+    return 0
+
+
+def cmd_rm(name):
+    names = [n for n in load_watchlist() if n != name]
+    save_watchlist(names)
+    try:
+        os.remove(state_path(name))
+    except OSError:
+        pass
+    print(f"stopped watching {name}")
+    return 0
+
+
+def cmd_list():
+    names = load_watchlist()
+    now = datetime.datetime.now().timestamp()
+    for name in names:
+        st = load_state(name)
+        status = st.get("status")
+        if not status:
+            print(f"{name}: never checked")
+        elif status == "GONE":
+            print(f"{name}: GONE")
+        else:
+            quiet_min = int((now - st.get("last_change", now)) // 60)
+            print(f"{name}: {status} (last change ~{quiet_min}m ago)")
+    return 0
+
+
+def cmd_check(as_json):
+    names = load_watchlist()
+    if not names:
+        print("watch: no sessions watched (mac-watch add <name>)")
+        return 0
+    if run(MAC_SSH, "true").returncode != 0:
+        print("watch: transport failed — Mac unreachable? (state unchanged)")
+        return 1
+    now = datetime.datetime.now().timestamp()
+    results = [check_one(n, now) for n in names]
+    if as_json:
+        print(json.dumps({"sessions": results}, indent=2))
+        return 0
+    ts = datetime.datetime.now().strftime("%F %T %Z")
+    print(f"watch {ts} — {len(names)} session(s)")
+    news = False
+    for res in results:
+        line = f"### {res['name']} — {res['status']}"
+        if res.get("detail"):
+            line += f" ({res['detail']})"
+        print(line)
+        if res.get("block"):
+            news = True
+            for ln in res["block"]:
+                print(f"    {ln}")
+    if not news:
+        print("all quiet")
+    return 0
+
+
+def usage():
+    print(__doc__.strip().split("\n\n")[-1])
+    return 1
+
+
+def main(argv):
+    if len(argv) < 2:
+        return usage()
+    cmd, rest = argv[1], argv[2:]
+    if cmd == "add" and len(rest) == 1:
+        return cmd_add(rest[0])
+    if cmd == "rm" and len(rest) == 1:
+        return cmd_rm(rest[0])
+    if cmd == "list" and not rest:
+        return cmd_list()
+    if cmd == "check":
+        return cmd_check(as_json="--json" in rest)
+    return usage()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -43,8 +43,9 @@ Muse runs the loop: it reads each session's output, keeps the agents moving,
 and only taps you when something actually needs you.
 
 The `bin/mac-watch` helper does the polling behind that loop: it tracks
-watched sessions and reports when one needs input, goes quiet, or stalls —
-designed to run on a schedule.
+watched sessions and shows what's changed in each. Muse reads the report
+and makes the call — whether a session needs input, finished a step, or
+stalled — and only taps you when something actually needs you.
 
 The skill ships two helpers:
 
