@@ -14,12 +14,16 @@ Helpers live in `bin/` — always use them, never hand-roll the SSH/tmux plumbin
 - `bin/mac-ssh [args...]` — SSH to the Mac. Example: `bin/mac-ssh 'uptime'`
 - `bin/mac-tmux <cmd>` — terminal sessions on the Mac via tmux:
   - `new <name> <dir> <cmd...>` — start a detached session running `cmd` in `dir`
-  - `see <name> [lines]` — read the pane's screen text (what the agent sees)
-  - `send <name> <text...>` — type text literally, then Enter (submits a prompt)
-  - `key <name> <key>` — send a raw key: `C-c`, `Escape`, `Up`
+  - `split <target> <dir> <cmd...>` — split the pane, run `cmd` in `dir`; prints the new `%pane-id`
+  - `panes [target]` — list panes; `layout <target> <name>` — tile them (`tiled`, `even-horizontal`, ...)
+  - `see <target> [lines]` — read the pane's screen text (what the agent sees)
+  - `send <target> <text...>` — type text literally, then Enter (submits a prompt)
+  - `key <target> <key>` — send a raw key: `C-c`, `Escape`, `Up`
   - `list`, `kill <name>`
-- `bin/mac-watch <cmd>` — supervise sessions: `add` / `rm` / `list` the
-  watchlist; `check [--json]` captures each watched pane, diffs it against
+  - `<target>` is a session name, `session:window.pane`, or `%pane-id` — one
+    tiled window can host several agents, each independently drivable.
+- `bin/mac-watch <cmd>` — supervise sessions or panes: `add` / `rm` / `list` the
+  watchlist (entries are session names or pane targets like `demo:0.1`); `check [--json]` captures each watched pane, diffs it against
   the last check, and prints one line per session plus blocks of new output.
   Reports mechanics only (CHANGED / QUIET / GONE) — it never judges
   "needs input" or "stuck". State in `<state-dir>/watch/`.

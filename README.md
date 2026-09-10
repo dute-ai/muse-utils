@@ -34,23 +34,24 @@ silently stuck on a confirmation prompt you didn't notice for an hour.
 
 Now, from one chat:
 
-> Start Claude Code in ~/myproject, call the session `driver`, and have it work
-> through the refactor. Start Codex in ~/myproject, call it `reviewer`, and have
-> it review each completed step. Watch both sessions and notify me whenever
-> either finishes a step, gets stuck, or needs a decision.
+> Start Claude Code in ~/myproject as a `driver` pane and Codex as a
+> `reviewer` pane, side by side in one window. Have the driver work through
+> the refactor and the reviewer check each completed step. Watch both panes
+> and notify me whenever either finishes a step, gets stuck, or needs a decision.
 
-Muse runs the loop: it reads each session's output, keeps the agents moving,
+Muse runs the loop: it reads each pane's output, keeps the agents moving,
 and only taps you when something actually needs you.
 
 The `bin/mac-watch` helper does the polling behind that loop: it tracks
-watched sessions and shows what's changed in each. Muse reads the report
-and makes the call — whether a session needs input, finished a step, or
+watched panes and shows what's changed in each. Muse reads the report
+and makes the call — whether a pane's agent needs input, finished a step, or
 stalled — and only taps you when something actually needs you.
 
 The skill ships two helpers:
 
 - `bin/mac-ssh` — SSH transport to the Mac over the Tailscale tunnel proxy
-- `bin/mac-tmux` — tmux session management: `list`, `new`, `see`, `send`, `key`, `kill`
+- `bin/mac-tmux` — tmux panes and sessions: `list`, `new`, `split`, `panes`,
+  `layout`, `see`, `send`, `key`, `kill`
 
 ## Requirements
 
@@ -64,7 +65,7 @@ install.sh                  installs the skill into ~/workspace/skills/
 skills/mac-remote/
   SKILL.md                  the skill: purpose, tooling, auth, operating rules
   bin/mac-ssh               SSH to the Mac over the Tailscale tunnel proxy
-  bin/mac-tmux              tmux sessions: new / see / send / key / list / kill
+  bin/mac-tmux              tmux panes/sessions: new / split / see / send / key / panes / layout / list / kill
   references/setup.md       one-time setup walkthrough
   references/gotchas.md     SSH/tmux/AppleScript pitfalls and how they're handled
 state/                      your config + SSH keys (gitignored, created by install.sh)

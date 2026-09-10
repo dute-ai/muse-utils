@@ -66,7 +66,10 @@ def save_watchlist(names):
 
 
 def state_path(name):
-    safe = "".join(c for c in name if c.isalnum() or c in "-_.")
+    # Map pane addressing into filename-safe form: demo:0.1 -> demo_0.1,
+    # %3 -> PCT3. Session names can't contain ':' so this can't collide.
+    safe = name.replace("%", "PCT").replace(":", "_")
+    safe = "".join(c for c in safe if c.isalnum() or c in "-_.")
     return os.path.join(WATCH_DIR, safe + ".json")
 
 
@@ -143,14 +146,20 @@ def check_one(name, now):
     return {"name": name, "status": "QUIET", "detail": detail, "block": block}
 
 
+def target_exists(name):
+    if name.startswith("%") or ":" in name:
+        return run(MAC_TMUX, "panes", name).returncode == 0
+    r = run(MAC_TMUX, "list")
+    return r.returncode == 0 and f"\n{name}:" in "\n" + r.stdout
+
+
 def cmd_add(name):
     names = load_watchlist()
     if name in names:
         print(f"{name} is already watched")
         return 0
-    r = run(MAC_TMUX, "list")
-    if r.returncode != 0 or f"\n{name}:" not in "\n" + r.stdout:
-        print(f"warning: no tmux session '{name}' right now (watching anyway)")
+    if not target_exists(name):
+        print(f"warning: no such session/pane '{name}' right now (watching anyway)")
     names.append(name)
     save_watchlist(names)
     print(f"watching {name}")

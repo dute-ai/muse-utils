@@ -6,10 +6,17 @@
 # Usage:
 #   mac-tmux list                       list tmux sessions on the Mac
 #   mac-tmux new <name> <dir> <cmd...>  start a detached session running cmd in dir
-#   mac-tmux see <name> [lines]         print the pane's screen text
-#   mac-tmux send <name> <text...>      type text literally, then press Enter
-#   mac-tmux key <name> <key>           send a raw key: C-c, Escape, Up, ...
+#   mac-tmux split <target> <dir> <cmd...>
+#                                       split target's pane, run cmd in dir; prints the new %pane-id
+#   mac-tmux panes [target]             list panes (all, or within target)
+#   mac-tmux layout <target> <name>     arrange panes: tiled, even-horizontal, even-vertical, ...
+#   mac-tmux see <target> [lines]       print the pane's screen text
+#   mac-tmux send <target> <text...>    type text literally, then press Enter
+#   mac-tmux key <target> <key>         send a raw key: C-c, Escape, Up, ...
 #   mac-tmux kill <name>                kill the session
+#
+# <target> is a session name, session:window.pane, or %pane-id. see/send/key
+# all accept pane targets, so one tiled window can host several agents.
 set -euo pipefail
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 MAC_SSH="$BIN_DIR/mac-ssh"
@@ -19,7 +26,7 @@ TMUX_BIN="${MAC_REMOTE_TMUX:-/opt/homebrew/bin/tmux}"
 REMOTE_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 q() { printf '%q' "$1"; }
 
-cmd="${1:?"usage: mac-tmux list|new|see|send|key|kill ..."}"; shift
+cmd="${1:?"usage: mac-tmux list|new|split|panes|layout|see|send|key|kill ..."}"; shift
 case "$cmd" in
   list)
     "$MAC_SSH" "$TMUX_BIN ls 2>&1"
@@ -29,6 +36,23 @@ case "$cmd" in
     [ "$#" -gt 0 ] || { echo "new <name> <dir> <cmd...>" >&2; exit 1; }
     "$MAC_SSH" "env PATH=$REMOTE_PATH $TMUX_BIN new-session -d -s $(q "$name") -c $(q "$dir") $(printf '%q ' "$@")" \
       && echo "session '$name' started"
+    ;;
+  split)
+    target="${1:?"split <target> <dir> <cmd...>"}"; dir="${2:?"split <target> <dir> <cmd...>"}"; shift 2
+    [ "$#" -gt 0 ] || { echo "split <target> <dir> <cmd...>" >&2; exit 1; }
+    # -P prints the new pane's id (%N), which is stable across layout changes.
+    "$MAC_SSH" "env PATH=$REMOTE_PATH $TMUX_BIN split-window -P -F '#{pane_id}' -t $(q "$target") -c $(q "$dir") $(printf '%q ' "$@")"
+    ;;
+  panes)
+    if [ "$#" -gt 0 ]; then
+      "$MAC_SSH" "$TMUX_BIN list-panes -t $(q "$1") -F '#{session_name}:#{window_index}.#{pane_index} #{pane_id} #{pane_current_command}' 2>&1"
+    else
+      "$MAC_SSH" "$TMUX_BIN list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_id} #{pane_current_command}' 2>&1"
+    fi
+    ;;
+  layout)
+    target="${1:?"layout <target> <name>"}"; lname="${2:?"layout <target> <name>"}"
+    "$MAC_SSH" "$TMUX_BIN select-layout -t $(q "$target") $(q "$lname") 2>&1"
     ;;
   see)
     name="${1:?"see <name> [lines]"}"; lines="${2:-}"
