@@ -27,6 +27,21 @@ Once installed, just ask:
 - "What's showing in the `review` session?"
 - "Tell the `review` session to continue."
 
+### Example: supervising a multi-agent workflow
+
+Before: two terminal windows, constant context-switching, and a coding agent
+silently stuck on a confirmation prompt you didn't notice for an hour.
+
+Now, from one chat:
+
+> Start Claude Code in ~/relay, call the session `driver`, and have it work
+> through the refactor. Start Codex in ~/relay, call it `reviewer`, and have
+> it review each completed step. Watch both sessions and notify me whenever
+> either finishes a step, gets stuck, or needs a decision.
+
+Muse runs the loop: it reads each session's output, keeps the agents moving,
+and only taps you when something actually needs you.
+
 The skill ships two helpers:
 
 - `bin/mac-ssh` — SSH transport to the Mac over the Tailscale tunnel proxy
