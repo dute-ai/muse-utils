@@ -1,0 +1,57 @@
+#!/bin/bash
+# mac-tmux — start, observe, and drive tmux sessions on the user's Mac.
+# Transport: bin/mac-ssh (Tailscale SSH). Config: same env/config as mac-ssh,
+# plus MAC_REMOTE_TMUX (default /opt/homebrew/bin/tmux).
+#
+# Usage:
+#   mac-tmux list                       list tmux sessions on the Mac
+#   mac-tmux new <name> <dir> <cmd...>  start a detached session running cmd in dir
+#   mac-tmux see <name> [lines]         print the pane's screen text
+#   mac-tmux send <name> <text...>      type text literally, then press Enter
+#   mac-tmux key <name> <key>           send a raw key: C-c, Escape, Up, ...
+#   mac-tmux kill <name>                kill the session
+set -euo pipefail
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAC_SSH="$BIN_DIR/mac-ssh"
+TMUX_BIN="${MAC_REMOTE_TMUX:-/opt/homebrew/bin/tmux}"
+# Non-interactive SSH sessions lack /opt/homebrew/bin on PATH (node lives
+# there), so every session command gets an explicit PATH.
+REMOTE_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+q() { printf '%q' "$1"; }
+
+cmd="${1:?"usage: mac-tmux list|new|see|send|key|kill ..."}"; shift
+case "$cmd" in
+  list)
+    "$MAC_SSH" "$TMUX_BIN ls 2>&1"
+    ;;
+  new)
+    name="${1:?"new <name> <dir> <cmd...>"}"; dir="${2:?"new <name> <dir> <cmd...>"}"; shift 2
+    [ "$#" -gt 0 ] || { echo "new <name> <dir> <cmd...>" >&2; exit 1; }
+    "$MAC_SSH" "env PATH=$REMOTE_PATH $TMUX_BIN new-session -d -s $(q "$name") -c $(q "$dir") $(printf '%q ' "$@")" \
+      && echo "session '$name' started"
+    ;;
+  see)
+    name="${1:?"see <name> [lines]"}"; lines="${2:-}"
+    if [ -n "$lines" ]; then
+      "$MAC_SSH" "$TMUX_BIN capture-pane -t $(q "$name") -p -S -$(q "$lines") 2>&1"
+    else
+      "$MAC_SSH" "$TMUX_BIN capture-pane -t $(q "$name") -p 2>&1"
+    fi
+    ;;
+  send)
+    name="${1:?"send <name> <text..."}"; shift
+    text="$*"
+    # Small pause before Enter: TUIs can swallow an Enter that arrives while
+    # they are still rendering pasted text.
+    "$MAC_SSH" "$TMUX_BIN send-keys -t $(q "$name") -l $(q "$text") 2>&1 && sleep 0.7 && $TMUX_BIN send-keys -t $(q "$name") Enter 2>&1"
+    ;;
+  key)
+    name="${1:?"key <name> <key>"}"; key="${2:?"key <name> <key>"}"
+    "$MAC_SSH" "$TMUX_BIN send-keys -t $(q "$name") $(q "$key") 2>&1"
+    ;;
+  kill)
+    name="${1:?"kill <name>"}"
+    "$MAC_SSH" "$TMUX_BIN kill-session -t $(q "$name") 2>&1" && echo "session '$name' killed"
+    ;;
+  *) echo "unknown command: $cmd" >&2; exit 1 ;;
+esac

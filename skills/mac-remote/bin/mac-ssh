@@ -1,0 +1,49 @@
+#!/bin/bash
+# mac-ssh — SSH from this Muse VM to the user's Mac over Tailscale.
+#
+# Config resolution (first wins):
+#   1. Env vars: MAC_REMOTE_USER, MAC_REMOTE_HOST, MAC_SSH_KEY
+#   2. Config file: $MAC_REMOTE_CONFIG, else <state-dir>/config (KEY=VALUE lines)
+#
+# The state dir defaults to <repo>/state when run from a checkout, else
+# ~/workspace/mac-remote/state. Override with MAC_REMOTE_STATE_DIR.
+#
+# Usage: mac-ssh [ssh args...]    e.g. mac-ssh 'uptime'
+set -euo pipefail
+
+if [ -n "${MAC_REMOTE_STATE_DIR:-}" ]; then
+  STATE_DIR="$MAC_REMOTE_STATE_DIR"
+else
+  # bin/ lives at <repo>/skills/mac-remote/bin, so the repo root is ../../..
+  REPO_ROOT="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd || true)"
+  if [ -n "${REPO_ROOT:-}" ] && [ -d "$REPO_ROOT/state" ]; then
+    STATE_DIR="$REPO_ROOT/state"
+  else
+    STATE_DIR="$HOME/workspace/mac-remote/state"
+  fi
+fi
+
+CONFIG_FILE="${MAC_REMOTE_CONFIG:-$STATE_DIR/config}"
+if [ -f "$CONFIG_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$CONFIG_FILE"
+  set +a
+fi
+
+MAC_REMOTE_USER="${MAC_REMOTE_USER:?MAC_REMOTE_USER is not set (the macOS username). See references/setup.md}"
+MAC_REMOTE_HOST="${MAC_REMOTE_HOST:?MAC_REMOTE_HOST is not set (the Mac Tailscale IP). See references/setup.md}"
+MAC_SSH_KEY="${MAC_SSH_KEY:-$STATE_DIR/id_ed25519}"
+[ -f "$MAC_SSH_KEY" ] || { echo "SSH key not found: $MAC_SSH_KEY — see references/setup.md" >&2; exit 1; }
+
+# The tailnet is reachable only through the runtime tunnel proxy: same host as
+# $HTTPS_PROXY, but port 3130 selects Tailscale. TCP with CONNECT only.
+proxy_noport="${HTTPS_PROXY:?HTTPS_PROXY is not set — this script runs on a Muse VM.}"; proxy_noport="${proxy_noport%:*}"
+proxy_noscheme="${proxy_noport#*://}"
+proxy_host="${proxy_noscheme#*@}"
+proxy_userpass="${proxy_noscheme%@*}"
+
+exec ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=accept-new \
+  -i "$MAC_SSH_KEY" \
+  -o ProxyCommand="socat STDIO PROXY:${proxy_host}:%h:%p,proxyport=3130,proxyauth=${proxy_userpass}" \
+  "$MAC_REMOTE_USER@$MAC_REMOTE_HOST" "$@"
