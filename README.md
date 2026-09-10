@@ -34,8 +34,8 @@ silently stuck on a confirmation prompt you didn't notice for an hour.
 
 Now, from one chat:
 
-> Start Claude Code in ~/relay, call the session `driver`, and have it work
-> through the refactor. Start Codex in ~/relay, call it `reviewer`, and have
+> Start Claude Code in ~/myproject, call the session `driver`, and have it work
+> through the refactor. Start Codex in ~/myproject, call it `reviewer`, and have
 > it review each completed step. Watch both sessions and notify me whenever
 > either finishes a step, gets stuck, or needs a decision.
 
