@@ -37,18 +37,6 @@ The skill ships two helpers:
 - Mac with Tailscale installed, Remote Login enabled, and tmux (`brew install tmux`)
 - Muse VM on the same Tailscale network (handled during setup)
 
-## Configuration
-
-Machine-specific settings resolve from environment variables first, then
-`<state-dir>/config`:
-
-| Variable | Meaning |
-| -------- | ------- |
-| `MAC_REMOTE_USER` | macOS username |
-| `MAC_REMOTE_HOST` | Mac's Tailscale IP |
-| `MAC_SSH_KEY` | SSH private key (default `<state-dir>/id_ed25519`) |
-| `MAC_REMOTE_TMUX` | tmux binary (default `/opt/homebrew/bin/tmux`) |
-
 ## Repository layout
 
 ```
