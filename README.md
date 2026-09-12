@@ -1,5 +1,12 @@
 # mac-remote
 
+> **Note:** this repo is becoming a collection of small
+> [Muse](https://muse.ai) utilities (rename pending). It currently holds:
+> - **mac-remote** — this page: a remote terminal on your Mac over Tailscale
+>   SSH, so Muse can run commands and supervise coding agents in tmux panes.
+> - **youtube-lounge** — play, pause, and check YouTube on any TV via the
+>   "Link with TV code" lounge protocol. Docs: [`youtube-lounge/`](youtube-lounge/).
+
 Give your Muse a remote terminal on your Mac.
 
 `mac-remote` is a [Muse](https://muse.ai) skill that connects Muse to your Mac
@@ -61,13 +68,17 @@ The skill ships two helpers:
 ## Repository layout
 
 ```
-install.sh                  installs the skill into ~/workspace/skills/
+install.sh                  installs the skills into ~/workspace/skills/
 skills/mac-remote/
   SKILL.md                  the skill: purpose, tooling, auth, operating rules
   bin/mac-ssh               SSH to the Mac over the Tailscale tunnel proxy
   bin/mac-tmux              tmux panes/sessions: new / split / see / send / key / panes / layout / list / kill
   references/setup.md       one-time setup walkthrough
   references/gotchas.md     SSH/tmux/AppleScript pitfalls and how they're handled
+skills/youtube-lounge/
+  SKILL.md                  the skill: purpose, tooling, config, operating rules
+youtube-lounge/
+  yt-tv                     YouTube TV remote (lounge protocol) + README
 state/                      your config + SSH keys (gitignored, created by install.sh)
 ```
 

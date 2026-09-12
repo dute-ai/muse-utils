@@ -1,0 +1,407 @@
+#!/usr/bin/env python3
+"""YouTube remote for any TV running the YouTube app, via the
+'Link with TV code' lounge protocol.
+
+Pair once with the code shown on the TV (YouTube app -> Settings ->
+Link with TV code), then control playback from anywhere with internet
+access -- commands go through YouTube's cloud, so the remote does not
+need to be on the same network as the TV.
+
+  yt-tv --tv "Living Room" pair <12-digit-code>
+  yt-tv play <video-id-or-url>
+  yt-tv pause | resume | stop | status
+  yt-tv search <query>            # resolve a title to a video id (needs yt-dlp)
+
+TVs are identified by name (--tv); the default is $YOUTUBE_LOUNGE_TV,
+or the only paired TV if there is exactly one. Credentials live in
+~/.config/youtube-lounge/ (or $YOUTUBE_LOUNGE_DIR); lounge tokens last
+~14 days and are refreshed automatically.
+
+Protocol notes (from public wire specs, e.g. ytcast):
+- all bodies are application/x-www-form-urlencoded, Origin: https://www.youtube.com
+- bind responses are "<len>\\n<JSON>" chunks; SID arrives as ["c", sid, "", 8],
+  gsessionid as ["S", gsessionid]
+- commands need req0__sc with a DOUBLE underscore; arguments use a single
+  underscore (req0_videoId, ...)
+- use a fresh bind per command batch; rebind on 400/404, refresh token on 410
+- some networks/proxies answer empty-body POSTs with 411, so every request
+  carries a form body (count=0 / count=1)
+
+Watch-history note: playback started through this remote is attributed to
+whatever Google account the TV's YouTube app is signed into. Pairing here
+is anonymous, so for videos to land in your YouTube history, link the TV
+to your account first from your phone: YouTube app -> Settings ->
+Link with TV code, while signed in.
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+import requests
+
+BASE = 'https://www.youtube.com/api/lounge'
+TIMEOUT = 30
+
+CONFIG_DIR = os.path.expanduser(
+    os.environ.get('YOUTUBE_LOUNGE_DIR', '~/.config/youtube-lounge'))
+SENDER_NAME = os.environ.get('YOUTUBE_LOUNGE_NAME', 'Muse')
+
+HEADERS = {
+    'Origin': 'https://www.youtube.com',
+    'User-Agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+                   'AppleWebKit/537.36 (KHTML, like Gecko) '
+                   'Chrome/120.0.0.0 Safari/537.36'),
+}
+
+
+# ---------------------------------------------------------------- config
+def slugify(name):
+    slug = re.sub(r'[^a-z0-9]+', '-', name.strip().lower()).strip('-')
+    if not slug:
+        raise RuntimeError(f'bad TV name: {name!r}')
+    return slug
+
+
+def creds_path(name):
+    return os.path.join(CONFIG_DIR, f'{slugify(name)}.json')
+
+
+def known_tvs():
+    """TV names that have paired credentials, derived from creds files."""
+    if not os.path.isdir(CONFIG_DIR):
+        return []
+    names = []
+    for f in sorted(os.listdir(CONFIG_DIR)):
+        if f.endswith('.json'):
+            try:
+                with open(os.path.join(CONFIG_DIR, f)) as fh:
+                    names.append(json.load(fh).get('label', f[:-5]))
+            except (OSError, ValueError):
+                continue
+    return names
+
+
+def resolve_tv(name):
+    name = name or os.environ.get('YOUTUBE_LOUNGE_TV')
+    if not name:
+        tvs = known_tvs()
+        if len(tvs) == 1:
+            return tvs[0]
+        raise RuntimeError(
+            'no TV selected: use --tv NAME'
+            + (f'; paired TVs: {", ".join(tvs)}' if tvs else
+               ' (nothing paired yet -- run `yt-tv --tv NAME pair <code>`)'))
+    if not os.path.exists(creds_path(name)) and not known_tvs():
+        pass  # let pair create it; other commands will fail on load
+    return name
+
+
+def load_creds(name):
+    try:
+        with open(creds_path(name)) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise RuntimeError(
+            f'no credentials for TV {name!r}; pair it first: '
+            f'yt-tv --tv {name} pair <tv-code>')
+
+
+def save_creds(name, creds):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(creds_path(name), 'w') as f:
+        json.dump(creds, f, indent=2)
+
+
+# ---------------------------------------------------------------- http
+def _post(path, params, data=None, timeout=TIMEOUT):
+    # NB: always send a form body -- some networks 411 on empty POSTs.
+    r = requests.post(BASE + path, params=params, data=data or {'count': '0'},
+                      headers=HEADERS, timeout=timeout)
+    return r
+
+
+def _get(path, params):
+    return requests.get(BASE + path, params=params,
+                        headers=HEADERS, timeout=TIMEOUT)
+
+
+# ---------------------------------------------------------------- pairing
+def pair(code, tv):
+    code = code.replace(' ', '').replace('-', '').strip()
+    r = _get('/pairing/get_screen', {'pairing_code': code})
+    if r.status_code != 200:
+        raise RuntimeError(f'get_screen -> HTTP {r.status_code}: {r.text[:200]}')
+    screen = r.json().get('screen') or {}
+    if not screen.get('screenId') or not screen.get('loungeToken'):
+        raise RuntimeError(f'pairing failed, response: {r.text[:300]}')
+    creds = {
+        'screenId': screen['screenId'],
+        'loungeToken': screen['loungeToken'],
+        'expiration': int(screen['expiration']),  # epoch ms
+        'name': screen.get('name', 'YouTube on TV'),
+        'label': tv,
+    }
+    save_creds(tv, creds)
+    print(f"paired {tv!r} with '{creds['name']}'")
+    return creds
+
+
+def refresh_token(tv, creds=None):
+    creds = creds or load_creds(tv)
+    r = _post('/pairing/get_lounge_token_batch',
+              {}, {'screen_ids': creds['screenId']})
+    if r.status_code != 200:
+        raise RuntimeError(
+            f'token refresh -> HTTP {r.status_code}: {r.text[:200]}')
+    screens = r.json().get('screens') or []
+    if not screens or not screens[0].get('loungeToken'):
+        raise RuntimeError(f'token refresh failed: {r.text[:300]}')
+    s = screens[0]
+    creds['loungeToken'] = s['loungeToken']
+    creds['expiration'] = int(s['expiration'])  # epoch ms
+    save_creds(tv, creds)
+    return creds
+
+
+def ensure_token(tv):
+    creds = load_creds(tv)
+    if time.time() * 1000 > creds['expiration'] - 60_000:
+        creds = refresh_token(tv, creds)
+        print('token refreshed')
+    return creds
+
+
+# ---------------------------------------------------------------- session
+def _parse_chunks(text):
+    """Yield parsed JSON arrays from '<len>\\n<json>' chunked bodies."""
+    dec = json.JSONDecoder()
+    i = text.find('[')
+    while i != -1:
+        try:
+            obj, end = dec.raw_decode(text, i)
+        except json.JSONDecodeError:
+            break
+        yield obj
+        i = text.find('[', end)
+
+
+def bind(token, name=SENDER_NAME):
+    params = {'CVER': 1, 'RID': 1, 'VER': 8, 'app': 'youtube-desktop',
+              'device': 'REMOTE_CONTROL', 'id': 'remote',
+              'loungeIdToken': token, 'name': name}
+    r = _post('/bc/bind', params, {'count': '0'})
+    if r.status_code != 200:
+        raise RuntimeError(f'bind -> HTTP {r.status_code}: {r.text[:200]}')
+    sid = gsessionid = None
+    events = []
+    for chunk in _parse_chunks(r.text):
+        # each message: [<index>, [<eventName>, <args...>]]
+        for item in chunk:
+            if not isinstance(item, list) or len(item) != 2:
+                continue
+            idx, msg = item
+            if not isinstance(msg, list) or not msg:
+                continue
+            if msg[0] == 'c' and len(msg) > 1:
+                sid = msg[1]
+            elif msg[0] == 'S' and len(msg) > 1:
+                gsessionid = msg[1]
+            elif isinstance(idx, int):
+                events.append(item)
+    if not sid or not gsessionid:
+        raise RuntimeError(
+            f'bind response missing SID/gsessionid: {r.text[:300]}')
+    return sid, gsessionid, events
+
+
+def command(token, sid, gsessionid, rid, sc, args=None):
+    params = {'CVER': 1, 'RID': rid, 'SID': sid, 'VER': 8,
+              'gsessionid': gsessionid, 'loungeIdToken': token}
+    data = {'count': '1', 'req0__sc': sc}  # NB: double underscore on __sc
+    for k, v in (args or {}).items():
+        data[f'req0_{k}'] = v
+    r = _post('/bc/bind', params, data)
+    if r.status_code in (400, 404):
+        raise RuntimeError('stale session (400/404) - rebind needed')
+    if r.status_code == 410:
+        raise RuntimeError('token expired (410) - refresh needed')
+    if r.status_code != 200:
+        raise RuntimeError(
+            f'command {sc} -> HTTP {r.status_code}: {r.text[:200]}')
+    return r
+
+
+def _with_session(tv, fn):
+    """Run fn(token, sid, gs, rid) with a fresh bind; retry once if stale."""
+    creds = ensure_token(tv)
+    token = creds['loungeToken']
+    try:
+        sid, gs, _ = bind(token)
+        return fn(token, sid, gs, 2)
+    except RuntimeError as e:
+        if 'stale session' in str(e):
+            sid, gs, _ = bind(token)
+            return fn(token, sid, gs, 2)
+        raise
+
+
+# ---------------------------------------------------------------- actions
+def _video_id(query_or_id):
+    """Accept a raw 11-char id, a watch URL, or fall back to search."""
+    m = re.search(r'(?:v=|youtu\.be/|/shorts/)([\w-]{11})', query_or_id)
+    if m:
+        return m.group(1)
+    if re.fullmatch(r'[\w-]{11}', query_or_id.strip()):
+        return query_or_id.strip()
+    (vid, _title), = search(query_or_id, 1)
+    return vid
+
+
+def play(tv, query_or_id):
+    vid = _video_id(query_or_id)
+
+    def _do(token, sid, gs, rid):
+        command(token, sid, gs, rid, 'setPlaylist', {
+            'videoId': vid, 'videoIds': vid,
+            'currentTime': '0', 'currentIndex': '0'})
+    _with_session(tv, _do)
+    print(f'sent play for {vid} -> {tv}')
+
+
+def pause(tv):
+    _with_session(tv, lambda t, s, g, r: command(t, s, g, r, 'pause'))
+    print(f'paused {tv}')
+
+
+def resume(tv):
+    _with_session(tv, lambda t, s, g, r: command(t, s, g, r, 'play'))
+    print(f'resumed {tv}')
+
+
+def stop(tv):
+    _with_session(tv, lambda t, s, g, r: command(t, s, g, r, 'stopVideo'))
+    print(f'stopped {tv}')
+
+
+def status(tv):
+    """Bind, ask for nowPlaying, then read one long-poll snapshot."""
+    creds = ensure_token(tv)
+    token = creds['loungeToken']
+    sid, gs, events = bind(token)
+    aid = 0
+    for item in events:
+        if isinstance(item, list) and len(item) == 2 and isinstance(item[0], int):
+            aid = max(aid, item[0])
+    command(token, sid, gs, 2, 'getNowPlaying')
+    params = {'loungeIdToken': token, 'VER': 8, 'v': 2, 'RID': 'rpc',
+              'SID': sid, 'gsessionid': gs, 'TYPE': 'xmlhttp',
+              't': 1, 'AID': aid, 'CI': 1}
+    r = _post('/bc/bind', params, {'count': '0'}, timeout=25)
+    now = None
+    for chunk in _parse_chunks(r.text):
+        for item in chunk:
+            if (isinstance(item, list) and len(item) == 2
+                    and isinstance(item[1], list) and item[1]
+                    and item[1][0] in ('nowPlaying', 'onStateChange')):
+                now = item[1]
+    if now:
+        _name, payload = now
+        state = {'0': 'stopped', '1': 'playing', '2': 'paused',
+                 '3': 'buffering'}.get(str(payload.get('state')),
+                                       payload.get('state'))
+        # NB: the videoId in the snapshot event can lag one video behind
+        # after a setPlaylist; duration/currentTime reflect the new video.
+        print(f'state={state} t={payload.get("currentTime")}/'
+              f'{payload.get("duration")}')
+    else:
+        print('no playback state reported (app idle or in menus)')
+
+
+# ---------------------------------------------------------------- search
+def _ytdlp_argv():
+    ytdlp = shutil.which('yt-dlp') or os.path.expanduser('~/.local/bin/yt-dlp')
+    if ytdlp and os.path.exists(ytdlp):
+        return [ytdlp]
+    return [sys.executable, '-m', 'yt_dlp']
+
+
+def search(query, n=1):
+    try:
+        out = subprocess.run(
+            _ytdlp_argv() + ['--no-warnings', '--flat-playlist',
+                             '--print', '%(id)s\t%(title)s',
+                             f'ytsearch{n}:{query}'],
+            capture_output=True, text=True, timeout=60)
+    except FileNotFoundError:
+        raise RuntimeError('yt-dlp not installed (pip install yt-dlp)')
+    results = [l.split('\t', 1) for l in out.stdout.strip().splitlines()
+               if l.strip()]
+    if not results:
+        raise RuntimeError(f'no results for: {query}')
+    return results
+
+
+# ---------------------------------------------------------------- cli
+def main(argv):
+    tv = None
+    name = None
+    rest = []
+    it = iter(range(len(argv)))
+    # minimal flag parsing: --tv NAME, --name SENDER (any position)
+    args = list(argv[1:])
+    i = 0
+    while i < len(args):
+        if args[i] == '--tv' and i + 1 < len(args):
+            tv, i = args[i + 1], i + 2
+        elif args[i] == '--name' and i + 1 < len(args):
+            name, i = args[i + 1], i + 2
+        else:
+            rest.append(args[i])
+            i += 1
+    if name:
+        global SENDER_NAME
+        SENDER_NAME = name
+    if not rest:
+        print(__doc__)
+        tvs = known_tvs()
+        print('paired TVs: ' + (', '.join(tvs) if tvs else '(none yet)'))
+        return 1
+    cmd, cmd_args = rest[0], rest[1:]
+    try:
+        if cmd == 'pair':
+            if not tv:
+                raise RuntimeError('pair needs --tv NAME')
+            pair(cmd_args[0], tv)
+            return 0
+        tv = resolve_tv(tv)
+        if cmd == 'play':
+            play(tv, cmd_args[0])
+        elif cmd == 'pause':
+            pause(tv)
+        elif cmd == 'resume':
+            resume(tv)
+        elif cmd == 'stop':
+            stop(tv)
+        elif cmd == 'status':
+            status(tv)
+        elif cmd == 'search':
+            for vid, title in search(' '.join(cmd_args), 3):
+                print(f'{vid}\t{title}')
+        else:
+            print(f'unknown command: {cmd}')
+            return 1
+    except IndexError:
+        print(f'command {cmd!r} needs an argument')
+        return 1
+    except Exception as e:
+        print(f'error: {e}')
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
