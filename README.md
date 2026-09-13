@@ -11,13 +11,21 @@ language.
 
 ## Install
 
-Everything, paste into Muse:
+Everything at once — paste into Muse:
 
 > Install the skills from https://github.com/dute-ai/muse-utils: clone it
 > to ~/workspace/muse-utils and run install.sh.
 
-Just one utility — same, but name it:
+Or one utility at a time:
 
 > Install just the mac-remote skill from
 > https://github.com/dute-ai/muse-utils: clone it to ~/workspace/muse-utils
-> and run install.sh mac-remote.
+> and run install.sh mac-remote. Then walk me through the one-time Mac
+> setup: enabling Remote Login, joining the same Tailscale network, and
+> authorizing an SSH key.
+
+> Install just the youtube-lounge skill from
+> https://github.com/dute-ai/muse-utils: clone it to ~/workspace/muse-utils
+> and run install.sh youtube-lounge. Then pair my "Living Room" TV — I'll
+> give you the 12-digit code from the TV's YouTube app → Settings → Link
+> with TV code.
