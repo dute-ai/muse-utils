@@ -52,6 +52,6 @@ case "$INSTALLED" in
     echo
     echo "For youtube-lounge: pair each TV once with the code from its"
     echo "YouTube app (Settings -> Link with TV code):"
-    echo "  $REPO_ROOT/youtube-lounge/yt-tv --tv \"Living Room\" pair <code>"
+    echo "  $DEST_ROOT/youtube-lounge/yt-tv --tv \"My TV\" pair <code>"
     ;;
 esac

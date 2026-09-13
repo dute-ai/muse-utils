@@ -12,7 +12,8 @@ does not need to be on the same network — but the YouTube app must already
 be open on the TV (this tool cannot launch apps or wake the TV).
 
 ## Tooling
-The script lives at `<repo>/youtube-lounge/yt-tv` (executable, Python 3,
+The `yt-tv` script lives next to this file (installed at
+`~/workspace/skills/youtube-lounge/yt-tv`; executable, Python 3,
 needs `requests` and `yt-dlp`). Always use it; never hand-roll the lounge
 protocol.
 
