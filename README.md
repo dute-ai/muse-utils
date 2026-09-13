@@ -4,6 +4,18 @@ Utilities for [Muse](https://muse.ai), built while working with it. Each
 one is a skill: install it once, then tell Muse what you want in plain
 language.
 
+## Demo
+
+Kuku watches the coding agents on my Mac while I'm away:
+
+![Kuku supervising Codex and Claude in a Mac terminal](mac-remote/demo/kuku-supervises-coding-agents.mp4)
+
+Two agents share one Mac terminal — Codex builds a small CLI, Claude reviews
+it. Kuku watches both panes: it picks up the review findings, answers the
+one design question from what it already knows about my preferences
+(single-file, keep it simple), and guides the builder to fix and re-test.
+The phone never buzzes.
+
 | Utility | What it's for |
 |---|---|
 | [mac-remote](mac-remote/) | Give Muse a remote terminal on your Mac — run commands, supervise coding agents in tmux panes |
