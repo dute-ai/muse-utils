@@ -26,6 +26,7 @@ Or one utility at a time:
 
 > Install just the youtube-lounge skill from
 > https://github.com/dute-ai/muse-utils: clone it to ~/workspace/muse-utils
-> and run install.sh youtube-lounge. Then pair my "Living Room" TV — I'll
-> give you the 12-digit code from the TV's YouTube app → Settings → Link
-> with TV code.
+> and run install.sh youtube-lounge. Then pair my "Living Room" TV using
+> the 12-digit code I'll paste from the TV's YouTube app → Settings → Link
+> with TV code (the code expires quickly, so I'll send it while it's on
+> screen).
