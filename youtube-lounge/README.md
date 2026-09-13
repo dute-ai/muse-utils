@@ -4,7 +4,9 @@ Control YouTube playback on your TV from a chat message — play, pause,
 resume, stop, and check what's playing — using YouTube's unofficial
 **Link with TV code** protocol. Commands go through YouTube's cloud, so
 the TV doesn't need to be on the same network. (The YouTube app must
-already be open on the TV.)
+already be open on the TV.) The protocol is unofficial and Google can
+change it without notice — if commands stop working, re-pairing the TV
+usually fixes it.
 
 Part of the [muse-utils](https://github.com/dute-ai/muse-utils) collection.
 
