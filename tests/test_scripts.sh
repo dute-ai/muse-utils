@@ -12,19 +12,19 @@ while IFS= read -r f; do
     else fail "bash syntax: ${f#$REPO/}"; fi
 done < <(
     find "$REPO" -name "*.sh" -not -path "*/.git/*" -not -path "*/state/*" -not -path "*/tests/*"
-    find "$REPO/skills" -path "*/bin/*" -type f -not -path "*/.git/*" | while IFS= read -r f; do
+    find "$REPO" -path "*/bin/*" -type f -not -path "*/.git/*" -not -path "*/tests/*" | while IFS= read -r f; do
         head -1 "$f" | grep -qE '^#!.*\b(bash|sh)\b' && echo "$f"
     done
 )
 
 # --- python compiles ---
-for py in "$REPO/skills/mac-remote/bin/mac-watch" "$REPO/skills/youtube-lounge/yt-tv"; do
+for py in "$REPO/mac-remote/bin/mac-watch" "$REPO/youtube-lounge/yt-tv"; do
     if python3 -m py_compile "$py" 2>/dev/null; then ok "py_compile: ${py#$REPO/}";
     else fail "py_compile: ${py#$REPO/}"; fi
 done
 
 # --- yt-tv CLI dispatch (isolated config dir, no network) ---
-YT="$REPO/skills/youtube-lounge/yt-tv"
+YT="$REPO/youtube-lounge/yt-tv"
 export YOUTUBE_LOUNGE_DIR="$(mktemp -d)"
 trap 'rm -rf "$YOUTUBE_LOUNGE_DIR"' EXIT
 

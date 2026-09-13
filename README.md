@@ -29,3 +29,7 @@ Or one utility at a time:
 > and run install.sh youtube-lounge. Then pair my TV using the 12-digit
 > code I'll paste from the TV's YouTube app → Settings → Link with TV
 > code (the code expires quickly, so I'll send it while it's on screen).
+
+Each utility directory is self-contained: you can also grab just one of
+them (e.g. only `youtube-lounge/`) and run the `install.sh` inside it —
+no need to clone the whole repo.

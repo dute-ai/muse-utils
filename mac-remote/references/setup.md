@@ -21,10 +21,12 @@ On the Mac, as the user who will own the sessions:
 
 ## 3. Keypair on the VM
 
+In the `state/` directory inside your mac-remote checkout (created by
+`install.sh`):
+
 ```bash
-mkdir -p ~/workspace/muse-utils/state
-ssh-keygen -t ed25519 -f ~/workspace/muse-utils/state/id_ed25519 -N "" -C "muse-vm"
-cat ~/workspace/muse-utils/state/id_ed25519.pub
+ssh-keygen -t ed25519 -f state/id_ed25519 -N "" -C "muse-vm"
+cat state/id_ed25519.pub
 ```
 
 Keys must live under `~/workspace/` — it is the only tree that survives VM
@@ -53,8 +55,8 @@ the user, key on one unbroken line).
 
 ## 5. Write the state config
 
-`~/workspace/muse-utils/state/config` (or wherever `MAC_REMOTE_STATE_DIR`
-points), `KEY=VALUE` lines:
+`state/config` inside your mac-remote checkout (or wherever
+`MAC_REMOTE_STATE_DIR` points), `KEY=VALUE` lines:
 
 ```bash
 MAC_REMOTE_USER=your-macos-username  # the macOS username from step 2

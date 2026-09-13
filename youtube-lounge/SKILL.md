@@ -48,4 +48,5 @@ protocol.
    behind; trust `duration`/`currentTime` for what's actually playing.
 4. A fresh `bind` is used per command batch inside the script; HTTP
    400/404 → rebind, 410 → token refresh are handled automatically.
-5. The repo-root `install.sh` installs this skill to `~/workspace/skills/`.
+5. The repo-root `install.sh` — or the utility's own `install.sh` — installs
+   this skill to `~/workspace/skills/`.

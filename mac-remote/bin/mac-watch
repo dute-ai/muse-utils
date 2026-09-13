@@ -38,11 +38,16 @@ NEW_LINES_CAP = 30   # cap on "new lines" shown for a changed pane
 def state_dir():
     if os.environ.get("MAC_REMOTE_STATE_DIR"):
         return os.environ["MAC_REMOTE_STATE_DIR"]
-    repo_root = os.path.abspath(os.path.join(BIN_DIR, "..", "..", ".."))
-    if os.path.isdir(os.path.join(repo_root, "state")):
-        return os.path.join(repo_root, "state")
-    # Installed copies don't sit under a repo checkout; try the conventional
-    # clone locations, newest name first (mac-remote is the legacy clone name).
+    util_dir = os.path.abspath(os.path.join(BIN_DIR, ".."))
+    dotfile = os.path.join(util_dir, ".state-dir")
+    if os.path.isfile(dotfile):
+        # installed copy: the installer recorded where it put state/
+        with open(dotfile) as f:
+            return f.read().strip()
+    if os.path.isdir(os.path.join(util_dir, "state")):
+        # running from a utility checkout: <util>/bin -> <util>/state
+        return os.path.join(util_dir, "state")
+    # Legacy install locations (mac-remote is the legacy clone name).
     for d in ("~/workspace/muse-utils/state", "~/workspace/mac-remote/state"):
         d = os.path.expanduser(d)
         if os.path.isdir(d):

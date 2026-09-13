@@ -5,10 +5,12 @@
 #   1. Env vars: MAC_REMOTE_USER, MAC_REMOTE_HOST, MAC_SSH_KEY
 #   2. Config file: $MAC_REMOTE_CONFIG, else <state-dir>/config (KEY=VALUE lines)
 #
-# The state dir defaults to <repo>/state when run from a checkout, else the
-# first existing of ~/workspace/muse-utils/state, ~/workspace/mac-remote/state
-# (muse-utils is the current repo name; mac-remote is the legacy clone name).
-# Override with MAC_REMOTE_STATE_DIR.
+# The state dir (first wins):
+#   1. $MAC_REMOTE_STATE_DIR
+#   2. the path the installer recorded (<skill>/.state-dir)
+#   3. <util>/state when run from a utility checkout (bin/ sits in <util>/)
+#   4. the first existing of ~/workspace/muse-utils/state,
+#      ~/workspace/mac-remote/state (legacy install locations)
 #
 # Usage: mac-ssh [ssh args...]    e.g. mac-ssh 'uptime'
 set -euo pipefail
@@ -16,13 +18,13 @@ set -euo pipefail
 if [ -n "${MAC_REMOTE_STATE_DIR:-}" ]; then
   STATE_DIR="$MAC_REMOTE_STATE_DIR"
 else
-  # bin/ lives at <repo>/skills/mac-remote/bin, so the repo root is ../../..
-  REPO_ROOT="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd || true)"
-  if [ -n "${REPO_ROOT:-}" ] && [ -d "$REPO_ROOT/state" ]; then
-    STATE_DIR="$REPO_ROOT/state"
+  BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+  UTIL_DIR="$(dirname "$BIN_DIR")"
+  if [ -f "$UTIL_DIR/.state-dir" ]; then
+    STATE_DIR="$(cat "$UTIL_DIR/.state-dir")"
+  elif [ -d "$UTIL_DIR/state" ]; then
+    STATE_DIR="$UTIL_DIR/state"
   else
-    # Installed copies don't sit under a repo checkout; try the conventional
-    # clone locations, newest name first.
     for d in "$HOME/workspace/muse-utils/state" "$HOME/workspace/mac-remote/state"; do
       if [ -d "$d" ]; then STATE_DIR="$d"; break; fi
     done

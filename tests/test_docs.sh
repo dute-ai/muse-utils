@@ -42,6 +42,14 @@ while IFS= read -r doc; do
     done < <(grep -o '\]([^)]*)' "$doc" | sed 's/^](//; s/)$//' | sort -u)
 done < <(find "$REPO" \( -name "README.md" -o -name "SKILL.md" \) -not -path "*/.git/*" | sort)
 
+# --- every utility dir (has SKILL.md) ships README.md + executable install.sh ---
+while IFS= read -r skill; do
+    udir="$(dirname "$skill")"
+    urel="${udir#$REPO/}"
+    [ -f "$udir/README.md" ] && ok "$urel has README.md" || fail "$urel missing README.md"
+    [ -x "$udir/install.sh" ] && ok "$urel has executable install.sh" || fail "$urel missing executable install.sh"
+done < <(find "$REPO" -maxdepth 2 -name "SKILL.md" -not -path "*/.git/*" | sort)
+
 # --- every script a SKILL.md claims exists, exists ---
 while IFS= read -r skill; do
     sdir="$(dirname "$skill")"
@@ -52,6 +60,6 @@ while IFS= read -r skill; do
                               || fail "skill tool missing: ${skill#$REPO/} -> $p";;
         esac
     done < <(grep -o '`[^`]*`' "$skill" | tr -d '`' | sort -u)
-done < <(find "$REPO/skills" -name "SKILL.md" | sort)
+done < <(find "$REPO" -maxdepth 2 -name "SKILL.md" -not -path "*/.git/*" | sort)
 
 [ "$fails" -eq 0 ]
