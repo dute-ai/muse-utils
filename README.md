@@ -11,7 +11,13 @@ language.
 
 ## Install
 
-Paste into Muse:
+Everything, paste into Muse:
 
 > Install the skills from https://github.com/dute-ai/muse-utils: clone it
 > to ~/workspace/muse-utils and run install.sh.
+
+Just one utility — same, but name it:
+
+> Install just the mac-remote skill from
+> https://github.com/dute-ai/muse-utils: clone it to ~/workspace/muse-utils
+> and run install.sh mac-remote.
