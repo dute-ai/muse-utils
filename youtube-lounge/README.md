@@ -5,7 +5,7 @@ AI assistant — using YouTube's unofficial **Link with TV code** lounge
 protocol. No same-network requirement: commands go from here through
 YouTube's cloud to the TV.
 
-Part of a [collection of Muse utilities](https://github.com/dute-ai/mac-remote)
+Part of a [collection of Muse utilities](https://github.com/dute-ai/muse-utils)
 (the repo is being renamed; the link still works).
 
 ## Setup

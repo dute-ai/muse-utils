@@ -1,89 +1,32 @@
-# mac-remote
+# muse-utils
 
-> **Note:** this repo is becoming a collection of small
-> [Muse](https://muse.ai) utilities (rename pending). It currently holds:
-> - **mac-remote** — this page: a remote terminal on your Mac over Tailscale
->   SSH, so Muse can run commands and supervise coding agents in tmux panes.
-> - **youtube-lounge** — play, pause, and check YouTube on any TV via the
->   "Link with TV code" lounge protocol. Docs: [`youtube-lounge/`](youtube-lounge/).
+A collection of small [Muse](https://muse.ai) utilities — skills and scripts
+that give your Muse useful powers. Install one or all of them.
 
-Give your Muse a remote terminal on your Mac.
+## Utilities
 
-`mac-remote` is a [Muse](https://muse.ai) skill that connects Muse to your Mac
-over SSH via Tailscale. Muse can run commands, start persistent terminal
-sessions, read their output, and interact with them — for example, to
-supervise coding agents like Claude Code or Codex running on your machine.
+- **[mac-remote](mac-remote/)** — a remote terminal on your Mac over Tailscale
+  SSH, so Muse can run commands and supervise coding agents in tmux panes.
+- **[youtube-lounge](youtube-lounge/)** — play, pause, and check YouTube on
+  any TV via the "Link with TV code" lounge protocol.
 
 ## Install
 
-Ask Muse to install it:
+Ask Muse to install from https://github.com/dute-ai/muse-utils:
 
-> Install the mac-remote skill from https://github.com/dute-ai/mac-remote:
-> clone it to ~/workspace/mac-remote and run install.sh.
+> Install the skills from https://github.com/dute-ai/muse-utils: clone it to
+> ~/workspace/muse-utils and run install.sh.
 
-Muse will then guide you through the one-time Mac setup: enabling Remote
-Login, joining the same Tailscale network, and authorizing an SSH key.
-(Details: `skills/mac-remote/references/setup.md`.)
-
-## Usage
-
-Once installed, just ask:
-
-- "Run `uptime` on my Mac."
-- "Start a Claude Code session in ~/myproject and call it `review`."
-- "What's showing in the `review` session?"
-- "Tell the `review` session to continue."
-
-### Example: supervising a multi-agent workflow
-
-Before: two terminal windows, constant context-switching, and a coding agent
-silently stuck on a confirmation prompt you didn't notice for an hour.
-
-Now, from one chat:
-
-> Start Claude Code in ~/myproject as a `driver` pane and Codex as a
-> `reviewer` pane, side by side in one window. Have the driver work through
-> the refactor and the reviewer check each completed step. Watch both panes
-> and notify me whenever either finishes a step, gets stuck, or needs a decision.
-
-Muse runs the loop: it reads each pane's output, keeps the agents moving,
-and only taps you when something actually needs you.
-
-The `bin/mac-watch` helper does the polling behind that loop: it tracks
-watched panes and shows what's changed in each. Muse reads the report
-and makes the call — whether a pane's agent needs input, finished a step, or
-stalled — and only taps you when something actually needs you.
-
-The skill ships two helpers:
-
-- `bin/mac-ssh` — SSH transport to the Mac over the Tailscale tunnel proxy
-- `bin/mac-tmux` — tmux panes and sessions: `list`, `new`, `split`, `panes`,
-  `layout`, `see`, `send`, `key`, `kill`
-
-## Requirements
-
-- Mac with Tailscale installed, Remote Login enabled, and tmux (`brew install tmux`)
-- Muse VM on the same Tailscale network (handled during setup)
+`install.sh` copies every skill under `skills/` into `~/workspace/skills/`
+(clean reinstall; any existing `state/` is untouched). Each utility's README
+covers its own one-time setup.
 
 ## Repository layout
 
 ```
-install.sh                  installs the skills into ~/workspace/skills/
-skills/mac-remote/
-  SKILL.md                  the skill: purpose, tooling, auth, operating rules
-  bin/mac-ssh               SSH to the Mac over the Tailscale tunnel proxy
-  bin/mac-tmux              tmux panes/sessions: new / split / see / send / key / panes / layout / list / kill
-  references/setup.md       one-time setup walkthrough
-  references/gotchas.md     SSH/tmux/AppleScript pitfalls and how they're handled
-skills/youtube-lounge/
-  SKILL.md                  the skill: purpose, tooling, config, operating rules
-youtube-lounge/
-  yt-tv                     YouTube TV remote (lounge protocol) + README
-state/                      your config + SSH keys (gitignored, created by install.sh)
+install.sh            installs all skills into ~/workspace/skills/
+skills/               the installable skills (one dir per skill)
+mac-remote/           docs for the mac-remote utility
+youtube-lounge/       the yt-tv remote script + its docs
+state/                your machine-specific config + keys (gitignored)
 ```
-
-## Development
-
-The repo is the source of truth. `install.sh` cleanly reinstalls the skill
-into `~/workspace/skills/mac-remote/` (your `state/` is untouched). Edit in
-the repo, reinstall, and push.
