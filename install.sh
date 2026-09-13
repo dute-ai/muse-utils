@@ -1,6 +1,6 @@
 #!/bin/bash
 # install.sh — install the skills in this repo into this Muse VM.
-# Safe to re-run: it cleanly reinstalls each skill (state/ is untouched).
+# Safe to re-run: it cleanly reinstalls each skill without touching state/.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_SRC="$REPO_ROOT/skills"

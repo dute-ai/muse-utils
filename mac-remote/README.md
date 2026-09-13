@@ -79,5 +79,5 @@ state/                      your config + SSH keys (gitignored, created by insta
 ## Development
 
 The repo is the source of truth. `install.sh` cleanly reinstalls the skill
-into `~/workspace/skills/mac-remote/` (your `state/` is untouched). Edit in
+into `~/workspace/skills/mac-remote/` without touching `state/`. Edit in
 the repo, reinstall, and push.

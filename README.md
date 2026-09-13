@@ -17,8 +17,8 @@ Ask Muse to install from https://github.com/dute-ai/muse-utils:
 > Install the skills from https://github.com/dute-ai/muse-utils: clone it to
 > ~/workspace/muse-utils and run install.sh.
 
-`install.sh` copies every skill under `skills/` into `~/workspace/skills/`
-(clean reinstall; any existing `state/` is untouched). Each utility's README
+`install.sh` copies every skill under `skills/` into `~/workspace/skills/`.
+Safe to re-run: it never modifies `state/`. Each utility's README
 covers its own one-time setup.
 
 ## Repository layout
