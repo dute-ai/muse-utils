@@ -41,7 +41,13 @@ def state_dir():
     repo_root = os.path.abspath(os.path.join(BIN_DIR, "..", "..", ".."))
     if os.path.isdir(os.path.join(repo_root, "state")):
         return os.path.join(repo_root, "state")
-    return os.path.expanduser("~/workspace/mac-remote/state")
+    # Installed copies don't sit under a repo checkout; try the conventional
+    # clone locations, newest name first (mac-remote is the legacy clone name).
+    for d in ("~/workspace/muse-utils/state", "~/workspace/mac-remote/state"):
+        d = os.path.expanduser(d)
+        if os.path.isdir(d):
+            return d
+    return os.path.expanduser("~/workspace/muse-utils/state")
 
 
 WATCH_DIR = os.path.join(state_dir(), "watch")

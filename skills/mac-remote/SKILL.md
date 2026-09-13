@@ -37,7 +37,7 @@ SSH key auth. One-time setup is in `references/setup.md`: enable Remote Login on
 3. `send` types into a live session: only send what the user asked for. Never send interrupt keys (`C-c`) to a session you didn't start unless asked.
 4. You cannot see the Mac's screen (`screencapture` fails — an SSH session has no display) and cannot inject keystrokes/clicks into GUI apps (Accessibility denies it). Launching apps with `open -a` and driving Terminal.app via AppleScript (`do script`, `contents of tab`) do work — see `references/gotchas.md`.
 5. Keep the Mac's Tailscale IP, username, and key paths in the state config, never in chat or logs. Never print a private key.
-6. The helpers resolve config from env vars first, then `<state-dir>/config`. When run from this repo the state dir is `<repo>/state` (gitignored); when installed, `~/workspace/mac-remote/state`.
+6. The helpers resolve config from env vars first, then `<state-dir>/config`. When run from this repo the state dir is `<repo>/state` (gitignored); when installed, the first existing of `~/workspace/muse-utils/state`, `~/workspace/mac-remote/state` (override with `MAC_REMOTE_STATE_DIR`).
 7. `mac-watch` is a mechanical reporter, not a judge. `check` captures each
    watched pane, diffs it against the last check, and shows what changed —
    CHANGED with the new lines, QUIET with how long it's been quiet, GONE if

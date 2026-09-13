@@ -7,7 +7,7 @@ Do these once. Afterwards `bin/mac-ssh 'echo ok'` should print `ok`.
 - The VM joins with `tailscale up` (the user approves the join URL — only they can).
 - The Mac needs the Tailscale app / `tailscale` CLI on the same network.
 - Confirm from the VM: `tailscale status` lists the Mac. Note its Tailscale IP
-  (e.g. `100.100.226.1`; on the Mac, `tailscale ip`). There is no MagicDNS here —
+  (e.g. `100.x.y.z`; on the Mac, `tailscale ip`). There is no MagicDNS here —
   always address machines by tailnet IP.
 
 ## 2. SSH on the Mac
@@ -22,9 +22,9 @@ On the Mac, as the user who will own the sessions:
 ## 3. Keypair on the VM
 
 ```bash
-mkdir -p ~/workspace/mac-remote/state
-ssh-keygen -t ed25519 -f ~/workspace/mac-remote/state/id_ed25519 -N "" -C "muse-vm"
-cat ~/workspace/mac-remote/state/id_ed25519.pub
+mkdir -p ~/workspace/muse-utils/state
+ssh-keygen -t ed25519 -f ~/workspace/muse-utils/state/id_ed25519 -N "" -C "muse-vm"
+cat ~/workspace/muse-utils/state/id_ed25519.pub
 ```
 
 Keys must live under `~/workspace/` — it is the only tree that survives VM
@@ -53,12 +53,12 @@ the user, key on one unbroken line).
 
 ## 5. Write the state config
 
-`~/workspace/mac-remote/state/config` (or wherever `MAC_REMOTE_STATE_DIR`
+`~/workspace/muse-utils/state/config` (or wherever `MAC_REMOTE_STATE_DIR`
 points), `KEY=VALUE` lines:
 
 ```bash
-MAC_REMOTE_USER=gqchen          # the macOS username from step 2
-MAC_REMOTE_HOST=100.100.226.1   # the Tailscale IP from step 1
+MAC_REMOTE_USER=your-macos-username  # the macOS username from step 2
+MAC_REMOTE_HOST=100.x.y.z           # the Tailscale IP from step 1
 # MAC_SSH_KEY=...               # default: <state-dir>/id_ed25519
 # MAC_REMOTE_TMUX=...           # default: /opt/homebrew/bin/tmux
 ```

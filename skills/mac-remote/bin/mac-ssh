@@ -5,8 +5,10 @@
 #   1. Env vars: MAC_REMOTE_USER, MAC_REMOTE_HOST, MAC_SSH_KEY
 #   2. Config file: $MAC_REMOTE_CONFIG, else <state-dir>/config (KEY=VALUE lines)
 #
-# The state dir defaults to <repo>/state when run from a checkout, else
-# ~/workspace/mac-remote/state. Override with MAC_REMOTE_STATE_DIR.
+# The state dir defaults to <repo>/state when run from a checkout, else the
+# first existing of ~/workspace/muse-utils/state, ~/workspace/mac-remote/state
+# (muse-utils is the current repo name; mac-remote is the legacy clone name).
+# Override with MAC_REMOTE_STATE_DIR.
 #
 # Usage: mac-ssh [ssh args...]    e.g. mac-ssh 'uptime'
 set -euo pipefail
@@ -19,7 +21,12 @@ else
   if [ -n "${REPO_ROOT:-}" ] && [ -d "$REPO_ROOT/state" ]; then
     STATE_DIR="$REPO_ROOT/state"
   else
-    STATE_DIR="$HOME/workspace/mac-remote/state"
+    # Installed copies don't sit under a repo checkout; try the conventional
+    # clone locations, newest name first.
+    for d in "$HOME/workspace/muse-utils/state" "$HOME/workspace/mac-remote/state"; do
+      if [ -d "$d" ]; then STATE_DIR="$d"; break; fi
+    done
+    STATE_DIR="${STATE_DIR:-$HOME/workspace/muse-utils/state}"
   fi
 fi
 
