@@ -19,5 +19,6 @@ Paste into Muse:
 
 After that, just ask:
 
-- "Play <video> on the living room TV."
+- "Play the latest Dwarkesh Patel episode on my TV."
+- "Put some lofi hip hop radio on my TV."
 - "Pause the TV." / "What's playing on the TV?"
