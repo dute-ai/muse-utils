@@ -9,6 +9,8 @@ Part of a [collection of Muse utilities](https://github.com/dute-ai/muse-utils).
 
 ## Setup
 
+The script is standalone — no install step, just run `./yt-tv` directly.
+
 Prerequisites: Python 3, `pip install requests yt-dlp`.
 
 1. On the TV, open the YouTube app → **Settings** → **Link with TV code**.

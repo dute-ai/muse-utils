@@ -12,10 +12,10 @@ that give your Muse useful powers. Install one or all of them.
 
 ## Install
 
-Ask Muse to install from https://github.com/dute-ai/muse-utils:
-
-> Install the skills from https://github.com/dute-ai/muse-utils: clone it to
-> ~/workspace/muse-utils and run install.sh.
+```bash
+git clone https://github.com/dute-ai/muse-utils ~/workspace/muse-utils
+cd ~/workspace/muse-utils && ./install.sh
+```
 
 `install.sh` copies every skill under `skills/` into `~/workspace/skills/`.
 Safe to re-run: it never modifies `state/`. Each utility's README

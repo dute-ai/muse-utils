@@ -1,58 +1,65 @@
 # mac-remote
 
-Give your Muse a remote terminal on your Mac.
+A remote terminal on your Mac over Tailscale SSH: run commands and
+supervise long-lived terminal sessions (tmux) — from your Muse VM, or
+straight from the command line.
 
-`mac-remote` is a [Muse](https://muse.ai) skill that connects Muse to your Mac
-over SSH via Tailscale. Muse can run commands, start persistent terminal
-sessions, read their output, and interact with them — for example, to
-supervise coding agents like Claude Code or Codex running on your machine.
+It ships as a [Muse](https://muse.ai) skill (an AI assistant can drive
+the whole thing: see `../skills/mac-remote/SKILL.md`), but the helpers
+are plain scripts you can run yourself.
 
 ## Install
 
-Ask Muse to install it:
+```bash
+git clone https://github.com/dute-ai/muse-utils ~/workspace/muse-utils
+cd ~/workspace/muse-utils && ./install.sh
+```
 
-> Install the mac-remote skill from https://github.com/dute-ai/muse-utils:
-> clone it to ~/workspace/muse-utils and run install.sh.
-
-Muse will then guide you through the one-time Mac setup: enabling Remote
-Login, joining the same Tailscale network, and authorizing an SSH key.
+One-time Mac setup: enable Remote Login, join the same Tailscale network
+on both ends, and authorize an SSH key.
 (Details: `../skills/mac-remote/references/setup.md`.)
 
 ## Usage
 
-Once installed, just ask:
+The helpers live in `skills/mac-remote/bin/` (shown as `bin/` below).
 
-- "Run `uptime` on my Mac."
-- "Start a Claude Code session in ~/myproject and call it `review`."
-- "What's showing in the `review` session?"
-- "Tell the `review` session to continue."
+Run a command on the Mac:
 
-### Example: supervising a multi-agent workflow
+```bash
+bin/mac-ssh 'uptime'
+```
 
-Before: two terminal windows, constant context-switching, and a coding agent
-silently stuck on a confirmation prompt you didn't notice for an hour.
+Start a persistent session and interact with it:
 
-Now, from one chat:
+```bash
+bin/mac-tmux new review ~/myproject claude   # start 'review' running claude in ~/myproject
+bin/mac-tmux see review                       # read what's on screen
+bin/mac-tmux send review "continue"           # type text, then Enter
+bin/mac-tmux key review C-c                   # send a raw key
+bin/mac-tmux list                             # all sessions
+```
 
-> Start Claude Code in ~/myproject as a `driver` pane and Codex as a
-> `reviewer` pane, side by side in one window. Have the driver work through
-> the refactor and the reviewer check each completed step. Watch both panes
-> and notify me whenever either finishes a step, gets stuck, or needs a decision.
+Tile several agents side by side in one window:
 
-Muse runs the loop: it reads each pane's output, keeps the agents moving,
-and only taps you when something actually needs you.
+```bash
+bin/mac-tmux split review ~/myproject codex   # split the pane, run codex; prints the new %pane-id
+bin/mac-tmux layout review tiled
+bin/mac-tmux panes review
+```
 
-The `bin/mac-watch` helper does the polling behind that loop: it tracks
-watched panes and shows what's changed in each. Muse reads the report
-and makes the call — whether a pane's agent needs input, finished a step, or
-stalled — and only taps you when something actually needs you.
+Targets accept session names, `session:window.pane`, or `%pane-id`.
 
-The skill ships three helpers:
+Watch sessions for changes:
 
-- `bin/mac-ssh` — SSH transport to the Mac over the Tailscale tunnel proxy
-- `bin/mac-tmux` — tmux panes and sessions: `list`, `new`, `split`, `panes`,
-  `layout`, `see`, `send`, `key`, `kill`
-- `bin/mac-watch` — watch panes; report CHANGED / QUIET / GONE
+```bash
+bin/mac-watch add review
+bin/mac-watch check        # per session: CHANGED (new lines) / QUIET (how long) / GONE
+```
+
+`mac-watch` reports mechanics only — what changed, not what it means.
+The skill teaches an assistant how to interpret the report and run the
+supervision loop: poll, read each pane's output, keep the agents moving,
+and only interrupt you when something actually needs a decision.
 
 ## Requirements
 
@@ -74,7 +81,7 @@ skills/mac-remote/
   bin/mac-watch             watch panes; report CHANGED / QUIET / GONE
   references/setup.md       one-time setup walkthrough
   references/gotchas.md     SSH/tmux/AppleScript pitfalls and how they're handled
-state/                      your config + SSH keys (gitignored, created by install.sh)
+state/                      machine-specific config + SSH keys (gitignored, created by install.sh)
 ```
 
 ## Development
