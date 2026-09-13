@@ -377,6 +377,11 @@ def main(argv):
                 raise RuntimeError('pair needs --tv NAME')
             pair(cmd_args[0], tv)
             return 0
+        if cmd == 'search':
+            # search needs no TV: resolve the query, don't touch credentials
+            for vid, title in search(' '.join(cmd_args), 3):
+                print(f'{vid}\t{title}')
+            return 0
         tv = resolve_tv(tv)
         if cmd == 'play':
             play(tv, cmd_args[0])
@@ -388,9 +393,6 @@ def main(argv):
             stop(tv)
         elif cmd == 'status':
             status(tv)
-        elif cmd == 'search':
-            for vid, title in search(' '.join(cmd_args), 3):
-                print(f'{vid}\t{title}')
         else:
             print(f'unknown command: {cmd}')
             return 1
