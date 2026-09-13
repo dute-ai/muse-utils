@@ -16,7 +16,7 @@ Ask Muse to install it:
 
 Muse will then guide you through the one-time Mac setup: enabling Remote
 Login, joining the same Tailscale network, and authorizing an SSH key.
-(Details: `skills/mac-remote/references/setup.md`.)
+(Details: `../skills/mac-remote/references/setup.md`.)
 
 ## Usage
 
@@ -47,11 +47,12 @@ watched panes and shows what's changed in each. Muse reads the report
 and makes the call — whether a pane's agent needs input, finished a step, or
 stalled — and only taps you when something actually needs you.
 
-The skill ships two helpers:
+The skill ships three helpers:
 
 - `bin/mac-ssh` — SSH transport to the Mac over the Tailscale tunnel proxy
 - `bin/mac-tmux` — tmux panes and sessions: `list`, `new`, `split`, `panes`,
   `layout`, `see`, `send`, `key`, `kill`
+- `bin/mac-watch` — watch panes; report CHANGED / QUIET / GONE
 
 ## Requirements
 

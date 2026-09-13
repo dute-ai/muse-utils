@@ -5,8 +5,7 @@ AI assistant — using YouTube's unofficial **Link with TV code** lounge
 protocol. No same-network requirement: commands go from here through
 YouTube's cloud to the TV.
 
-Part of a [collection of Muse utilities](https://github.com/dute-ai/muse-utils)
-(the repo is being renamed; the link still works).
+Part of a [collection of Muse utilities](https://github.com/dute-ai/muse-utils).
 
 ## Setup
 
@@ -69,5 +68,5 @@ From public wire specs (e.g. the MIT-licensed ytcast project):
 
 ## As a Muse skill
 
-`skills/youtube-lounge/SKILL.md` documents this for an AI agent; run
+`../skills/youtube-lounge/SKILL.md` documents this for an AI agent; run
 `./install.sh` at the repo root to install it alongside the other skills.
