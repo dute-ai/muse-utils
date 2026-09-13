@@ -48,6 +48,7 @@ while IFS= read -r skill; do
     urel="${udir#$REPO/}"
     [ -f "$udir/README.md" ] && ok "$urel has README.md" || fail "$urel missing README.md"
     [ -x "$udir/install.sh" ] && ok "$urel has executable install.sh" || fail "$urel missing executable install.sh"
+    [ -x "$udir/tests/run.sh" ] && ok "$urel has tests/run.sh" || fail "$urel missing tests/run.sh"
 done < <(find "$REPO" -maxdepth 2 -name "SKILL.md" -not -path "*/.git/*" | sort)
 
 # --- every script a SKILL.md claims exists, exists ---
