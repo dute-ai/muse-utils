@@ -8,7 +8,7 @@ language.
 
 Kuku watches the coding agents on my Mac while I'm away:
 
-![Kuku supervising Codex and Claude in a Mac terminal](mac-remote/demo/kuku-supervises-coding-agents.mp4)
+https://github.com/user-attachments/assets/d36c3df2-3ea7-4d86-a220-e8f803849faa
 
 Two agents share one Mac terminal — Codex builds a small CLI, Claude reviews
 it. Kuku watches both panes: it picks up the review findings, answers the
