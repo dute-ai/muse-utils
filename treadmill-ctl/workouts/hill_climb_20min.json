@@ -1,0 +1,86 @@
+{
+ "name": "Black Mountain hill climb \u2014 20 min (U05 equivalent)",
+ "notes": "Weeks 3-4 treadmill hill session. 16 x 75s segments. Second half lowered to 3.0 mph after first full run 2026-10-01 (too tough). Capped at 4.0 mph / 10%.",
+ "segments": [
+  {
+   "duration_s": 75,
+   "incline_pct": 0,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 3,
+   "speed_mph": 3.5
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 5,
+   "speed_mph": 3.5
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 6,
+   "speed_mph": 3.5
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 8,
+   "speed_mph": 3.2
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 8,
+   "speed_mph": 3.5
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 6,
+   "speed_mph": 3.5
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 4,
+   "speed_mph": 3.5
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 6,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 8,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 8,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 7,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 6,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 4,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 2,
+   "speed_mph": 3.0
+  },
+  {
+   "duration_s": 75,
+   "incline_pct": 0,
+   "speed_mph": 3.0
+  }
+ ]
+}

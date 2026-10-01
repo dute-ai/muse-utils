@@ -20,6 +20,7 @@ The phone never buzzes.
 |---|---|
 | [mac-remote](mac-remote/) | Give Muse a remote terminal on your Mac — run commands, supervise coding agents in tmux panes |
 | [youtube-lounge](youtube-lounge/) | Control YouTube playback on your TV from a chat message |
+| [treadmill-ctl](treadmill-ctl/) | Drive a Lifesmart incline treadmill over BLE — supervised workouts with a hard safety envelope |
 
 ## Install
 
