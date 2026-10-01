@@ -19,6 +19,12 @@ mkdir -p "$DEST/workouts"
 cp "$UTIL_DIR"/workouts/*.json "$DEST/workouts/"
 
 echo "Installed skill -> $DEST"
+if [ ! -f "$HOME/workspace/skills/mac-remote/SKILL.md" ]; then
+    echo
+    echo "Note: driving the treadmill from Muse needs the mac-remote skill"
+    echo "(the scripts run on the Mac; this VM has no Bluetooth)."
+    echo "Install it with: ./install.sh mac-remote   (from the repo root)"
+fi
 echo
 echo "The scripts run on a Mac with Bluetooth (see README.md):"
 echo "  System Settings -> Privacy & Security -> Bluetooth -> enable Terminal"

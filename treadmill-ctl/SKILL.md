@@ -12,13 +12,15 @@ start/stop) and the vendor FitShow protocol (0xFFF0 — speed/incline with
 echo read-back). Nothing moves without a supervised start.
 
 ## Tooling
-The scripts live next to this file (installed at
-`~/workspace/skills/treadmill-ctl/`). They run **on the Mac, not on this
-VM** — the VM has no Bluetooth. Drive them through the mac-remote skill:
-BLE commands must be launched *inside* Terminal.app via AppleScript
+**Requires the mac-remote skill.** The scripts below run **on the Mac, not
+on this VM** — the VM has no Bluetooth. Drive them through mac-remote: BLE
+commands must be launched *inside* Terminal.app via AppleScript
 (`do script`), because macOS attributes the Bluetooth permission to the
 launching app. The same command over plain SSH is denied with "Bluetooth
 is not authorized".
+
+The scripts live next to this file (installed at
+`~/workspace/skills/treadmill-ctl/`).
 
 One-time Mac setup (details in `README.md`):
 1. Python 3.12+ with `bleak` (`pip install bleak`).

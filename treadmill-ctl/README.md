@@ -3,6 +3,11 @@
 Drives the Lifesmart incline treadmill (BLE name `TM4500`) from a Mac
 over Bluetooth LE. Verified working 2026-09-28 against the physical unit.
 
+**Requires:** the [mac-remote](../mac-remote/) skill when driving this from
+Muse — the scripts run on the Mac (this VM has no Bluetooth), and Muse
+reaches the Mac through mac-remote. Hand-running the scripts directly on
+the Mac needs no other utility.
+
 ## Protocol map (measured, not assumed)
 
 | Function | Protocol | Notes |
