@@ -1,6 +1,6 @@
 ---
 name: "pdf_redactor"
-description: "Redact sensitive values from PDFs entirely locally: deterministic detectors (SSN/ITIN, Luhn-checked cards, ABA-checked routing numbers, phones, emails, account numbers) plus an optional local-LLM pass (Ollama, or an OpenAI-compatible server like mlx_lm.server) for names and addresses. True text removal via PyMuPDF, metadata scrub, and a verify pass that fails loudly if anything survives. Nothing leaves the machine."
+description: "Redact sensitive values from PDFs entirely locally: deterministic detectors (SSN/ITIN, Luhn-checked cards, ABA-checked routing numbers, phones, emails, account numbers — form-field values included) plus optional local-LLM and vision passes (Ollama, or an OpenAI-compatible server like mlx_lm.server / mlx_vlm.server) for names and addresses. True text removal via PyMuPDF, metadata scrub, and a verify pass that fails loudly if anything survives. Nothing leaves the machine."
 ---
 
 # pdf-redactor
@@ -17,16 +17,24 @@ Two scripts live next to this file (installed at
 `~/workspace/skills/pdf-redactor/`):
 
 - `redact.py` — the redactor. Pipeline:
-  1. Extract text with PyMuPDF.
-  2. Detect: pattern recognizers (SSN/ITIN with SSA rules, credit cards
+  1. Extract page text *and* form-field values with PyMuPDF — a
+     fillable form (e.g. the IRS 1040) stores typed values in AcroForm
+     fields, apart from the page text.
+  2. Detect: pattern recognizers (SSN/ITIN with SSA rules — dashed,
+     spaced, and one-digit-per-box layouts; bare-digit values inside
+     form fields classified by checksum/assignment rules; credit cards
      with Luhn, routing numbers with the ABA checksum — a random 9-digit
      number is *not* flagged — phones, emails, account numbers next to
      keywords), then an optional local-LLM pass for what patterns can't
-     know (names, addresses, odd formats). Every string the model returns
-     is verified to literally appear in the page text before use
-     (anti-hallucination), and a model failure never blocks the run.
+     know (names, addresses, odd formats), and an optional vision pass
+     whose candidates count only when corroborated by the document's
+     own data. Every string a model returns is verified against the
+     document before use (anti-hallucination), and a model failure
+     never blocks the run.
   3. Redact via PyMuPDF redaction annotations + `apply_redactions()` —
-     the text is *removed*, not painted over with a black box.
+     the text is *removed*, not painted over with a black box. Values
+     found inside form fields are cleared in the field itself; text
+     redaction alone strips their appearance while the value survives.
   4. Scrub document metadata.
   5. Verify: re-open the output, re-run every detector; exit non-zero if
      anything survived. The report lists counts by type only, never the
@@ -34,10 +42,13 @@ Two scripts live next to this file (installed at
 - `make_sample.py` — generates a fake 1040-like PDF with planted PII
   (plus a checksum-failing decoy number) for safe end-to-end testing.
 
-Backends for the LLM pass:
+Backends for the model passes:
 - `--backend ollama` (default) — Ollama `/api/chat` on :11434.
 - `--backend openai` — any OpenAI-compatible server on :8080, e.g.
   `mlx_lm.server` (the fast path on Apple Silicon) or LM Studio.
+- `--vision-model` — a vision model reads each rendered page image
+  (Ollama vision models, or an OpenAI-compatible vision server such
+  as `mlx_vlm.server`; plain `mlx_lm.server` is text-only).
 
 ## One-time setup
 ```sh
@@ -53,6 +64,8 @@ mlx_lm.server --model mlx-community/Qwen3-30B-A3B-4bit --port 8080
 .venv/bin/python redact.py input.pdf -o output.pdf --llm-model qwen3:30b-a3b
 .venv/bin/python redact.py input.pdf -o output.pdf --backend openai \
     --llm-model mlx-community/Qwen3-30B-A3B-4bit
+.venv/bin/python redact.py input.pdf -o output.pdf --backend openai \
+    --vision-model mlx-community/Qwen3-VL-8B-Instruct-4bit
 ```
 
 ## Operating Rules
@@ -70,4 +83,6 @@ mlx_lm.server --model mlx-community/Qwen3-30B-A3B-4bit --port 8080
    the OpenAI-compatible backend for 4096 max tokens, because a reasoning
    model can burn a small budget mid-thought and return no answer at all.
 5. Not in v1: scanned/image PDFs (no OCR yet — native-text PDFs like
-   TurboTax output are covered).
+   TurboTax output are covered; the vision pass can flag visible
+   values on born-digital pages but cannot remove uncorroborated
+   candidates on pure scans).
