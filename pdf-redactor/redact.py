@@ -29,6 +29,7 @@ import base64
 import json
 import re
 import sys
+import urllib.error
 import urllib.request
 
 import pymupdf
@@ -99,6 +100,38 @@ PHONE_RE = re.compile(r"\b(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}\b")
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 ACCT_KW_RE = re.compile(
     r"(?i)(?:account|acct|a/c)\s*(?:number|no\.?|#)?\s*[:#]?\s*([0-9][0-9 -]{3,20}[0-9])")
+EIN_RE = re.compile(r"\b\d{2}-\d{7}\b")
+DOB_KW_RE = re.compile(
+    r"(?i)(?:date of birth|d\.?o\.?b\.?|born)\s*:?\s*(\d{1,2}/\d{1,2}/\d{4})")
+BARE_LONG_RE = re.compile(r"\b\d{10,15}\b")
+
+# Tax forms label their name fields; patterns can't know what a name is,
+# but a value sitting right of one of these labels is a name by position.
+_NAME_LABELS = [
+    "name(s) shown on return",
+    "your first name and last name",
+    "spouse's first name and last name",
+    "spouse's name",
+    "taxpayer name",
+    "partner's name",
+    "name of partner",
+    "beneficiary name",
+    "student name",
+    "dependent name",
+    "employee name",
+    "recipient's name",
+]
+NAME_LABEL_RE = re.compile(
+    r"(?im)^.*?(?:" + "|".join(re.escape(x) for x in _NAME_LABELS) +
+    r")\s*:?\s+([A-Z][A-Za-z.'-]+(?: [A-Za-z.'-]+){1,4})\s*$")
+STREET_RE = re.compile(
+    r"\b\d{1,6} [A-Za-z.'-]+(?: [A-Za-z.'-]+){0,4} "
+    r"(?:Street|St|Avenue|Ave|Boulevard|Blvd|Road|Rd|Drive|Dr|Lane|Ln|"
+    r"Court|Ct|Way|Place|Pl|Terrace|Ter|Circle|Cir|Highway|Hwy|"
+    r"Parkway|Pkwy)\.?", re.IGNORECASE)
+CITYZIP_RE = re.compile(
+    r"\b[A-Za-z.'-]+(?: [A-Za-z.'-]+){0,3}, [A-Z]{2} \d{5}(?:-\d{4})?\b",
+    re.IGNORECASE)
 
 
 def detect_patterns(text: str) -> list[tuple[str, str]]:
@@ -132,6 +165,23 @@ def detect_patterns(text: str) -> list[tuple[str, str]]:
         hits.append(("email", m.group(0)))
     for m in ACCT_KW_RE.finditer(text):
         hits.append(("account_number", m.group(1).strip()))
+    for m in EIN_RE.finditer(text):
+        hits.append(("ein", m.group(0)))
+    for m in DOB_KW_RE.finditer(text):
+        hits.append(("date_of_birth", m.group(1)))
+    for m in NAME_LABEL_RE.finditer(text):
+        hits.append(("name", m.group(1).strip()))
+    for m in STREET_RE.finditer(text):
+        hits.append(("address", m.group(0)))
+    for m in CITYZIP_RE.finditer(text):
+        hits.append(("address", m.group(0)))
+    # A bare run of 10-15 digits that no checksum claimed is, in a tax
+    # document, an account or phone number far more often than it is a
+    # form artifact. Redacting a stray number is the cheap error here.
+    known_values = {v for _, v in hits}
+    for m in BARE_LONG_RE.finditer(text):
+        if m.group(0) not in known_values:
+            hits.append(("account_number", m.group(0)))
 
     # de-dup, keep order
     seen, out = set(), []
@@ -187,39 +237,59 @@ def _parse_llm_values(content, text: str) -> list[tuple[str, str]]:
     return hits
 
 
+def _post_json(url: str, payload: dict):
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        return json.loads(resp.read())
+
+
 def detect_llm_ollama(text: str, model: str, base_url: str):
-    body = json.dumps({
+    payload = {
         "model": model,
         "messages": [{"role": "user", "content": LLM_PROMPT.format(text=text)}],
         "stream": False,
         "format": "json",
-    }).encode()
-    req = urllib.request.Request(
-        base_url.rstrip("/") + "/api/chat", data=body,
-        headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        data = json.loads(resp.read())
+        # A scanner should answer, not deliberate: thinking mode is the
+        # main reason a local pass crawls. Models that don't support
+        # the flag reject the request; retry once without it.
+        "think": False,
+    }
+    try:
+        data = _post_json(base_url.rstrip("/") + "/api/chat", payload)
+    except Exception:
+        payload.pop("think")
+        data = _post_json(base_url.rstrip("/") + "/api/chat", payload)
     return _parse_llm_values(data["message"]["content"], text)
 
 
 def detect_llm_openai(text: str, model: str, base_url: str):
     """OpenAI-compatible chat endpoint — what mlx_lm.server and
     LM Studio serve. This is the fast path on Apple Silicon."""
-    body = json.dumps({
+    payload = {
         "model": model,
         "messages": [{"role": "user", "content": LLM_PROMPT.format(text=text)}],
         "stream": False,
         "temperature": 0,
-        # Reasoning models (Qwen3 etc.) burn tokens thinking before they
-        # answer; the server default (512 on mlx_lm.server) can run out
-        # mid-thought and return content=None. Give real headroom.
-        "max_tokens": 4096,
-    }).encode()
-    req = urllib.request.Request(
-        base_url.rstrip("/") + "/v1/chat/completions", data=body,
-        headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        data = json.loads(resp.read())
+        # Ask the model NOT to think: a scanner should answer, not
+        # deliberate, and thinking tokens are nearly all of the wait.
+        # Servers that reject the template kwarg get one retry without
+        # it (with a big budget, so a reasoning model can still finish
+        # its thought and answer — the original 512-default trap).
+        "max_tokens": 2048,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    try:
+        data = _post_json(base_url.rstrip("/") + "/v1/chat/completions",
+                          payload)
+    except urllib.error.HTTPError as e:
+        if e.code not in (400, 422):
+            raise
+        payload.pop("chat_template_kwargs")
+        payload["max_tokens"] = 4096
+        data = _post_json(base_url.rstrip("/") + "/v1/chat/completions",
+                          payload)
     msg = data["choices"][0]["message"]
     content = msg.get("content")
     if not content and msg.get("reasoning"):
@@ -387,17 +457,40 @@ def main() -> int:
 
     doc = pymupdf.open(args.input)
 
+    # --- image-only guard: a scanned PDF has no text layer for any of
+    # the passes to read, and "0 found, OK" would be a lie. The vision
+    # pass corroborates candidates against the document's data, so it
+    # cannot redact image-only pages either yet (OCR is the roadmap);
+    # refuse loudly instead of blessing an unredacted copy.
+    textless = [p.number + 1 for p in doc if not page_text_all(p).strip()]
+    if textless and len(textless) == len(doc):
+        print("FAIL: no extractable text on any page — this looks like a "
+              "scanned/image-only PDF, which this tool cannot redact yet "
+              "(OCR planned). Nothing was written.", file=sys.stderr)
+        return 2
+    if textless:
+        print(f"warning: page(s) {', '.join(map(str, textless))} have no "
+              f"extractable text and cannot be checked — treat the "
+              f"output as unverified for those pages", file=sys.stderr)
+
     # --- detect (patterns, then optional LLM)
     per_page = scan(doc)
     if args.llm_model:
+        llm_cache: dict[str, list] = {}
         for page in doc:
             text = page_text_all(page)
-            try:
-                extra = detect_llm(text, args.llm_model, base_url)
-            except Exception as e:  # LLM is a safety net, never a blocker
-                print(f"warning: LLM pass failed on page {page.number + 1}: {e}",
+            if text in llm_cache:
+                extra = llm_cache[text]
+            else:
+                print(f"LLM pass: page {page.number + 1}/{len(doc)}",
                       file=sys.stderr)
-                continue
+                try:
+                    extra = detect_llm(text, args.llm_model, base_url)
+                except Exception as e:  # LLM is a safety net, never a blocker
+                    print(f"warning: LLM pass failed on page "
+                          f"{page.number + 1}: {e}", file=sys.stderr)
+                    extra = []
+                llm_cache[text] = extra
             merged = per_page.get(page.number, [])
             known = {v for _, v in merged}
             merged += [h for h in extra if h[1] not in known]
@@ -411,6 +504,8 @@ def main() -> int:
             else detect_vision_openai
         for page in doc:
             text = page_text_all(page)
+            print(f"vision pass: page {page.number + 1}/{len(doc)}",
+                  file=sys.stderr)
             try:
                 png = page.get_pixmap(dpi=170).tobytes("png")
                 candidates = detect_vision(base64.b64encode(png).decode(),
@@ -435,6 +530,25 @@ def main() -> int:
             print(f"warning: vision pass reported {vision_unverified} "
                   f"value(s) not corroborated by the document's data; "
                   f"ignored", file=sys.stderr)
+
+    # --- propagate: a value found on any page is sensitive on every
+    # page. Tax returns repeat the taxpayer's name in headers, footers,
+    # and schedules the label pass may only catch once; without this,
+    # the same value survives wherever detection happened to miss it.
+    all_values: dict[str, str] = {}
+    for hits in per_page.values():
+        for t, v in hits:
+            all_values.setdefault(v, t)
+    for page in doc:
+        text = page_text_all(page)
+        merged = per_page.get(page.number, [])
+        known = {v for _, v in merged}
+        for v, t in all_values.items():
+            if v not in known and v in text:
+                merged.append((t, v))
+                known.add(v)
+        if merged:
+            per_page[page.number] = merged
 
     total_found = sum(len(v) for v in per_page.values())
 
@@ -482,11 +596,19 @@ def main() -> int:
     doc.save(args.output, garbage=4, deflate=True)
     doc.close()
 
-    # --- verify: the step that makes it trustworthy
+    # --- verify: the step that makes it trustworthy. Two checks, not
+    # one: re-run the pattern scan, AND confirm every literal value we
+    # redacted is actually absent — the pattern scan alone shares the
+    # detectors' blind spots (it cannot see an LLM-found name survive).
     check = pymupdf.open(args.output)
     remaining = scan(check)
+    check_text = "\n".join(page_text_all(p) for p in check)
     check.close()
-    total_left = sum(len(v) for v in remaining.values())
+    remaining_values = {v for hits in remaining.values() for _, v in hits}
+    literal_survivors = [v for v in all_values
+                         if v in check_text and v not in remaining_values]
+    total_left = sum(len(v) for v in remaining.values()) \
+        + len(literal_survivors)
 
     report = {
         "input": args.input,
@@ -499,6 +621,8 @@ def main() -> int:
                   for p, hits in per_page.items()},
         "found_total": total_found,
         "form_fields_cleared": fields_cleared,
+        "pages_without_text": textless,
+        "literal_survivors": len(literal_survivors),
         "remaining_after_redaction": total_left,
         "remaining_detail": {str(p + 1): sorted({t for t, _ in hits})
                              for p, hits in remaining.items()},

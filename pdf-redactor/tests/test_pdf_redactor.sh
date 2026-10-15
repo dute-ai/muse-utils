@@ -5,8 +5,9 @@
 #      SSA/Luhn/ABA checksums must accept real formats and reject decoys
 #   3. LLM reply parser: verbatim-in-text filter, malformed/empty replies
 #   4. end-to-end on the planted-PII sample, when PyMuPDF is importable:
-#      patterns-only run (8 found, 0 remaining, decoy + income untouched)
-#      and a mock-LLM run (name caught on both pages, hallucination dropped)
+#      patterns-only run (label names + addresses now caught too),
+#      a mock-LLM run (hallucination dropped), cross-page propagation,
+#      and the image-only guard (blank PDF must fail, never "OK")
 # Set PDF_REDACTOR_PYTHON to the python to test with (default python3).
 set -u
 cd "$(dirname "$0")/.."
@@ -46,6 +47,25 @@ assert ("account_number", "123456789012") in redact.detect_patterns(
     "Account number: 123456789012")
 # income figures are not PII to the patterns
 assert redact.detect_patterns("Total income 312,908") == []
+assert redact.detect_patterns("Form 1040  U.S. Individual Income Tax Return  2025") == []
+# EIN / keyword-anchored DOB (a bare filing date is NOT flagged)
+assert "ein" in types_of("EIN: 12-3456789")
+assert ("date_of_birth", "01/15/1980") in redact.detect_patterns(
+    "Date of birth: 01/15/1980")
+assert "date_of_birth" not in types_of("Filed on 01/15/1980")
+# label-anchored names: tax forms say whose name it is; position is signal
+assert ("name", "John Q Taxpayer") in redact.detect_patterns(
+    "Your first name and last name:  John Q Taxpayer")
+assert ("name", "John Q Taxpayer") in redact.detect_patterns(
+    "Schedule E\nName(s) shown on return:  John Q Taxpayer\nOther: x")
+# addresses: street line and city/state/ZIP line
+assert ("address", "123 Main Street") in redact.detect_patterns(
+    "Home address: 123 Main Street, Palo Alto, CA 94301")
+assert ("address", "Palo Alto, CA 94301") in redact.detect_patterns(
+    "Home address: 123 Main Street, Palo Alto, CA 94301")
+# a bare 10-15 digit run no checksum claimed reads as an account number
+assert ("account_number", "12345678901") in redact.detect_patterns(
+    "Ref 12345678901")
 # spaced and one-digit-per-box SSN layouts (the shapes tax forms produce)
 assert "ssn" in types_of("SSN: 123 45 6789")
 assert "ssn" not in types_of("SSN: 666 45 6789")
@@ -95,17 +115,21 @@ import json, sys
 import pymupdf
 tmp = sys.argv[1]
 rep = json.load(open(f"{tmp}/rep_patterns.json"))
-assert rep["found_total"] == 8, rep
+# 7 structured values on p1 + label name + street + city/state/ZIP on p1,
+# SSN + label name on p2
+assert rep["found_total"] == 12, rep
 assert rep["remaining_after_redaction"] == 0, rep
 text = "\n".join(p.get_text() for p in pymupdf.open(f"{tmp}/out_patterns.pdf"))
 assert "123456789" in text          # ABA-failing decoy survives
 assert "312,908" in text            # income figures survive
-assert "John Q Taxpayer" in text    # patterns alone can't know a name
+assert "John Q Taxpayer" not in text   # label pass caught it, both pages
+assert "123 Main Street" not in text
+assert "Palo Alto, CA 94301" not in text
 rep = json.load(open(f"{tmp}/rep_llm.json"))
-assert rep["found_total"] == 10, rep   # 8 patterns + name on both pages
+assert rep["found_total"] == 12, rep   # mock LLM's name already known
 assert rep["remaining_after_redaction"] == 0, rep
 text = "\n".join(p.get_text() for p in pymupdf.open(f"{tmp}/out_llm.pdf"))
-assert "John Q Taxpayer" not in text   # LLM pass caught it, both pages
+assert "John Q Taxpayer" not in text
 assert "999-99-9999" not in text       # hallucinated value never used
 print("e2e checks ok")
 EOF
@@ -150,6 +174,48 @@ for s in ("078-05-1120", "219-09-9999", "078 05 1120", "219099999"):
 print("form-field checks ok")
 EOF
     then ok "end-to-end form-field run"; else fail "end-to-end form-field run"; fi
+
+    # propagation: a name caught by label on page 1 must be removed from
+    # page 2 as well, where it appears with no label at all
+    if "$PY" - "$TMP" <<'EOF'
+import subprocess, sys
+import pymupdf
+tmp = sys.argv[1]
+doc = pymupdf.open()
+p1 = doc.new_page()
+p1.insert_text((72, 72), "Name(s) shown on return:  John Q Taxpayer", fontsize=10)
+p2 = doc.new_page()
+p2.insert_text((72, 72), "Dear John Q Taxpayer, your refund is ready.", fontsize=10)
+doc.save(f"{tmp}/prop_test.pdf")
+doc.close()
+r = subprocess.run([sys.executable, "redact.py", "prop_test.pdf", "-o",
+                    "prop_out.pdf"], cwd=tmp, capture_output=True)
+assert r.returncode == 0, r.stderr.decode()
+text = "\n".join(p.get_text() for p in pymupdf.open(f"{tmp}/prop_out.pdf"))
+assert "John Q Taxpayer" not in text
+assert "your refund is ready" in text
+print("propagation checks ok")
+EOF
+    then ok "end-to-end propagation run"; else fail "end-to-end propagation run"; fi
+
+    # image-only guard: a PDF with no text layer must FAIL (exit 2,
+    # nothing written), never report "0 found, OK"
+    if "$PY" - "$TMP" <<'EOF'
+import os, subprocess, sys
+import pymupdf
+tmp = sys.argv[1]
+doc = pymupdf.open()
+doc.new_page()
+doc.save(f"{tmp}/blank.pdf")
+doc.close()
+r = subprocess.run([sys.executable, "redact.py", "blank.pdf", "-o",
+                    "blank_out.pdf"], cwd=tmp, capture_output=True)
+assert r.returncode == 2, (r.returncode, r.stderr.decode())
+assert not os.path.exists(f"{tmp}/blank_out.pdf")
+assert b"scanned/image-only" in r.stderr
+print("image-only guard ok")
+EOF
+    then ok "image-only guard"; else fail "image-only guard"; fi
 fi
 
 [ "$fails" -eq 0 ]

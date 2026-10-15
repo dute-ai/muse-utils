@@ -13,6 +13,8 @@ mkdir -p "$DEST"
 # explicit skill payload — README.md, install.sh and tests/ stay out
 cp "$UTIL_DIR/SKILL.md" "$DEST/"
 cp "$UTIL_DIR/redact.py" "$UTIL_DIR/make_sample.py" "$DEST/"
+cp "$UTIL_DIR/redact.sh" "$DEST/"
+chmod +x "$DEST/redact.sh"
 
 echo "Installed skill -> $DEST"
 echo
